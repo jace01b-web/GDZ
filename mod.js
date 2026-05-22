@@ -2,19 +2,16 @@
     // =========================================================
     // 1. STATE & CONFIGURATION MANAGEMENT
     // =========================================================
-    const STORAGE_KEY = 'gd_wave_config_v4';
+    const STORAGE_KEY = 'gd_wave_premium_config_v5';
     
     // Default values
     let config = {
-        // Engine
         baseSpeed: 1.0,
         focusSpeed: 0.5,
         timeFreeze: false,
-        fpsUnlocker: false, // NEW: FPS Unlocker State
-        antiLag: false,     // NEW: Anti-Lag State
-        loopWeek: false,    // NEW: Continuous 1-week-per-second loop state
-        
-        // Transforms & Filters
+        fpsUnlocker: true, 
+        antiLag: true,     
+        loopWeek: false,    
         zoom: 1.0,
         rotation: 0,
         invertX: false,
@@ -25,39 +22,42 @@
         hue: 0,
         blur: 0,
         invertColors: 0,
-        
-        // Wave Visuals
+        grayscale: 0,
+        sepia: 0,
         rainbowMode: false,
         rainbowSpeed: 2.0,
         showAimLine: false,
         showGrid: false,
-        
-        // Macros
+        gridSize: 50,
+        showCrosshair: false,
+        crosshairType: 'cross', 
+        crosshairColor: '#00ffcc',
+        realCursor: 'default',
         autoClickerActive: false,
         autoClickerCPS: 15,
         jitterClick: false, 
-        
-        // Training
+        jitterIntensity: 3,
         ghostMode: 100, 
-        
-        // New Modifiers
         earthquake: false,
+        earthquakeIntensity: 5,
         deepFried: false,
         flashlight: false,
+        flashlightRadius: 80,
         cinematic: false,
         vignette: false,
-        
-        // Menu
-        menuOpacity: 0.95,
-        menuTheme: '#ff0055',
-        tabPosition: 'top' // 'top', 'bottom', 'left', 'right'
+        menuOpacity: 0.85,
+        menuTheme: '#00ffcc',
+        chromaTheme: true, 
+        tabPosition: 'left', 
+        toggleKey: 'm',
+        macroKey: 'c'
     };
 
     function loadConfig() {
         try {
             const saved = localStorage.getItem(STORAGE_KEY);
             if (saved) config = { ...config, ...JSON.parse(saved) };
-        } catch(e) { console.error("Could not load config", e); }
+        } catch(e) { console.error("Could not load premium config", e); }
     }
     
     function saveConfig() {
@@ -73,11 +73,11 @@
     loadConfig();
 
     // =========================================================
-    // 2. ENGINE CLOCK & RAF HIJACK (FPS UNLOCKER)
+    // 2. HIGH-PERFORMANCE ENGINE HIJACK (FPS UNLOCKER & SPEED)
     // =========================================================
     let speedMultiplier = config.baseSpeed;
     let shiftHeld = false;
-    let isTimeSkipping = false; // Prevents overrides during 24h burst button
+    let isTimeSkipping = false; 
     
     const originalPerfNow = performance.now.bind(performance);
     let perfLastReal = originalPerfNow();
@@ -103,20 +103,29 @@
         return Math.floor(dateFake);
     };
 
-    // FPS Unlocker Core Interceptor
+    // FIXED: True FPS Unlocker using setTimeout bypass to uncap refresh rates
     const originalRAF = window.requestAnimationFrame.bind(window);
+    const originalCAF = window.cancelAnimationFrame.bind(window);
+    
     window.requestAnimationFrame = function(callback) {
         if (config.fpsUnlocker) {
-            // Unlocks V-Sync restrictions by execution forcing through the event loop macro-tasking
-            return setTimeout(() => {
+            return window.setTimeout(() => {
                 callback(performance.now());
             }, 0);
         }
         return originalRAF(callback);
     };
 
+    window.cancelAnimationFrame = function(id) {
+        if (config.fpsUnlocker) {
+            window.clearTimeout(id);
+        } else {
+            originalCAF(id);
+        }
+    };
+
     // =========================================================
-    // 3. UI CONSTRUCTION
+    // 3. PREMIUM UI CONSTRUCTION (REDESIGNED)
     // =========================================================
     function buildModMenu() {
         if (document.getElementById('gd-standalone-menu')) return;
@@ -125,113 +134,141 @@
         style.innerHTML = `
             :root {
                 --theme-color: ${config.menuTheme};
-                --bg-color: rgba(10, 12, 18, var(--menu-alpha, 0.95));
+                --bg-color: rgba(18, 18, 24, ${config.menuOpacity});
+                --panel-border: rgba(255, 255, 255, 0.06);
+                --text-glow: 0 0 12px var(--theme-color);
+                --font-main: 'Inter', system-ui, -apple-system, sans-serif;
             }
             #gd-standalone-menu {
                 position: fixed; 
                 top: 50%; 
-                left: 40px; 
-                width: 400px; 
-                height: 580px;
-                background: var(--bg-color); backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
-                border: 1px solid rgba(255,255,255,0.1); border-radius: 12px;
-                color: #e0e0e0; font-family: "Inter", "Segoe UI", sans-serif;
-                z-index: 9999999; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8);
+                left: 60px; 
+                width: 520px; 
+                height: 640px;
+                background: var(--bg-color); 
+                backdrop-filter: blur(24px) saturate(140%); -webkit-backdrop-filter: blur(24px) saturate(140%);
+                border: 1px solid var(--panel-border); 
+                border-radius: 14px;
+                color: #f1f5f9; 
+                font-family: var(--font-main);
+                z-index: 9999999; 
+                box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
                 user-select: none; display: flex; flex-direction: column;
                 will-change: left, top, transform, opacity;
-                
                 opacity: 0;
-                transform: translateY(-50%) scale(0.92) translateX(-30px);
-                transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.4s ease, filter 0.4s ease;
-                filter: blur(5px);
+                transform-origin: left center;
+                transform: translateY(-50%) scale(0.95) translateX(-20px);
+                transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
             }
             
             #gd-standalone-menu.menu-visible {
                 opacity: 1;
                 transform: translateY(-50%) scale(1) translateX(0px);
-                filter: blur(0px);
             }
             
             #gd-standalone-menu.menu-hidden {
                 opacity: 0 !important;
-                transform: translateY(-50%) scale(0.95) translateX(-15px) !important;
+                transform: translateY(-50%) scale(0.95) translateX(-20px) !important;
                 pointer-events: none !important;
-                filter: blur(3px) !important;
             }
             
             .gd-header {
                 display: flex; justify-content: space-between; align-items: center;
-                background: linear-gradient(90deg, rgba(0,0,0,0.8), rgba(40,0,20,0.8));
-                padding: 15px 16px; cursor: move; border-top-left-radius: 12px; border-top-right-radius: 12px;
-                border-bottom: 2px solid var(--theme-color); flex-shrink: 0;
+                background: rgba(0, 0, 0, 0.2);
+                padding: 18px 24px; cursor: move; 
+                border-top-left-radius: 14px; border-top-right-radius: 14px;
+                border-bottom: 1px solid var(--panel-border); flex-shrink: 0;
             }
-            .gd-title { font-weight: 800; font-size: 16px; color: #fff; text-shadow: 0 0 8px var(--theme-color); letter-spacing: 1px;}
-            .gd-fps { font-family: monospace; color: var(--theme-color); font-size: 12px; font-weight: bold; background: rgba(0,0,0,0.5); padding: 3px 6px; border-radius: 4px; pointer-events: auto; }
+            .gd-title { font-weight: 800; font-size: 15px; color: #fff; letter-spacing: 2px; text-shadow: var(--text-glow); transition: text-shadow 0.3s; }
+            .gd-fps { font-family: monospace; color: #fff; font-size: 12px; font-weight: bold; background: rgba(0, 0, 0, 0.5); padding: 4px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); }
             
-            .gd-content-wrapper { display: flex; flex: 1; overflow: hidden; }
-            .gd-tabs { display: flex; background: rgba(0,0,0,0.5); flex-shrink: 0; }
+            .gd-content-wrapper { display: flex; flex: 1; overflow: hidden; position: relative; }
+            .gd-tabs { display: flex; flex-direction: column; background: rgba(0, 0, 0, 0.15); flex-shrink: 0; transition: all 0.4s ease; border-right: 1px solid var(--panel-border); width: 140px; }
             
+            .sidebar-header { padding: 24px 10px 16px; text-align: center; border-bottom: 1px solid var(--panel-border); margin-bottom: 8px; }
+            .sidebar-title { color: var(--theme-color); font-weight: 900; font-size: 16px; letter-spacing: 2px; text-shadow: var(--text-glow); }
+            .sidebar-subtitle { color: #64748b; font-size: 10px; font-weight: 600; text-transform: uppercase; margin-top: 6px; letter-spacing: 1px; }
+            .sidebar-footer { margin-top: auto; padding: 20px 10px; text-align: center; border-top: 1px solid var(--panel-border); background: rgba(0,0,0,0.1); }
+            
+            /* FIXED: Force green system status */
+            .status-dot { width: 8px; height: 8px; background: #10b981; border-radius: 50%; display: inline-block; box-shadow: 0 0 10px #10b981; animation: pulse 2s infinite; }
+            .status-text { color: #94a3b8; font-size: 9px; font-weight: 700; margin-top: 6px; letter-spacing: 1px; text-transform: uppercase; }
+            @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
+
+            /* Layout Fixes */
             .pos-top { flex-direction: column; }
-            .pos-top .gd-tabs { flex-direction: row; border-bottom: 1px solid rgba(255,255,255,0.1); }
-            .pos-top .gd-tab.active { border-bottom: 2px solid var(--theme-color); }
+            .pos-top .gd-tabs { flex-direction: row; border-bottom: 1px solid var(--panel-border); border-right: none; width: 100%; height: auto; }
+            .pos-top .sidebar-header, .pos-top .sidebar-footer { display: none; }
+            .pos-top .gd-tab.active { border-bottom: 2px solid var(--theme-color); background: rgba(255,255,255,0.03); border-right: none; }
             
-            .pos-bottom { flex-direction: column-reverse; }
-            .pos-bottom .gd-tabs { flex-direction: row; border-top: 1px solid rgba(255,255,255,0.1); }
-            .pos-bottom .gd-tab.active { border-top: 2px solid var(--theme-color); }
+            .gd-tab { display: flex; align-items: center; justify-content: flex-start; padding: 14px 20px; font-size: 12px; font-weight: 600; cursor: pointer; color: #94a3b8; transition: all 0.2s ease; border-right: 2px solid transparent; }
+            .gd-tab:hover { color: #f8fafc; background: rgba(255,255,255,0.03); }
+            .gd-tab.active { color: #fff; background: rgba(255,255,255,0.05); border-right: 2px solid var(--theme-color); text-shadow: 0 0 8px rgba(255,255,255,0.2); }
             
-            .pos-left { flex-direction: row; }
-            .pos-left .gd-tabs { flex-direction: column; width: 85px; border-right: 1px solid rgba(255,255,255,0.1); }
-            .pos-left .gd-tab.active { border-right: 2px solid var(--theme-color); background: rgba(255,255,255,0.1); }
+            .gd-body { flex: 1; padding: 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 24px; scroll-behavior: smooth; }
+            .gd-body::-webkit-scrollbar { width: 4px; }
+            .gd-body::-webkit-scrollbar-track { background: transparent; }
+            .gd-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
+            .gd-body::-webkit-scrollbar-thumb:hover { background: var(--theme-color); }
             
-            .pos-right { flex-direction: row-reverse; }
-            .pos-right .gd-tabs { flex-direction: column; width: 85px; border-left: 1px solid rgba(255,255,255,0.1); }
-            .pos-right .gd-tab.active { border-left: 2px solid var(--theme-color); background: rgba(255,255,255,0.1); }
-
-            .gd-tab { display: flex; align-items: center; justify-content: center; flex: 1; text-align: center; padding: 10px 5px; font-size: 11px; font-weight: 600; cursor: pointer; color: #888; transition: 0.2s; text-transform: uppercase; }
-            .gd-tab:hover { color: #fff; background: rgba(255,255,255,0.05); }
-            .gd-tab.active { color: var(--theme-color); background: rgba(255,255,255,0.1); }
+            .tab-content { display: none; flex-direction: column; gap: 20px; opacity: 0; transform: translateY(10px); transition: opacity 0.3s ease, transform 0.3s ease; }
+            .tab-content.active { display: flex; opacity: 1; transform: translateY(0px); }
             
-            .gd-body { flex: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; }
-            .gd-body::-webkit-scrollbar { width: 6px; }
-            .gd-body::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
-            .gd-body::-webkit-scrollbar-thumb { background: var(--theme-color); border-radius: 10px; }
-            .tab-content { display: none; flex-direction: column; gap: 15px; }
-            .tab-content.active { display: flex; }
-            .section-title { font-size: 11px; text-transform: uppercase; color: var(--theme-color); font-weight: 800; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 4px; margin-top: 5px;}
+            .section-title { font-size: 11px; text-transform: uppercase; color: var(--theme-color); font-weight: 800; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px; letter-spacing: 1.5px; opacity: 0.9; }
             
-            .mod-row { display: flex; justify-content: space-between; align-items: center; }
-            .mod-label { font-size: 13px; font-weight: 600; display: flex; flex-direction: column; }
-            .mod-subtext { font-size: 10px; color: #999; margin-top: 2px; font-weight: 400; }
+            .mod-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+            .mod-label { font-size: 13px; font-weight: 500; display: flex; flex-direction: column; color: #e2e8f0; line-height: 1.4; }
+            .mod-subtext { font-size: 11px; color: #64748b; font-weight: 400; margin-top: 2px; }
             
-            .switch { position: relative; display: inline-block; width: 36px; height: 18px; flex-shrink: 0; }
+            .warning-box { background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); color: #fca5a5; padding: 12px 16px; border-radius: 8px; font-size: 12px; font-weight: 500; display: flex; align-items: flex-start; gap: 12px; line-height: 1.5; }
+            
+            /* Sleeker Apple-style Toggles */
+            .switch { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
             .switch input { opacity: 0; width: 0; height: 0; }
-            .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(255,255,255,0.1); transition: .3s; border-radius: 18px; }
-            .slider:before { position: absolute; content: ""; height: 12px; width: 12px; left: 3px; bottom: 3px; background-color: #888; transition: .3s; border-radius: 50%; }
-            input:checked + .slider { background-color: rgba(255, 0, 85, 0.2); border: 1px solid var(--theme-color); }
-            input:checked + .slider:before { transform: translateX(18px); background-color: var(--theme-color); box-shadow: 0 0 5px var(--theme-color); }
+            .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(255,255,255,0.1); transition: 0.3s; border-radius: 24px; }
+            .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: #fff; transition: 0.3s; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.3); }
+            input:checked + .slider { background-color: var(--theme-color); }
+            input:checked + .slider:before { transform: translateX(20px); }
             
-            .range-container { display: flex; flex-direction: column; gap: 6px; }
-            .range-header { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; }
-            .range-val { color: var(--theme-color); font-weight: 700; font-family: monospace; }
+            /* REDESIGNED: Editable Clean Numbers */
+            .range-container { display: flex; flex-direction: column; gap: 12px; }
+            .range-header { display: flex; justify-content: space-between; font-size: 13px; font-weight: 500; color: #e2e8f0; align-items: center; }
+            .range-val-container { display: flex; align-items: center; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 2px 8px; transition: all 0.2s; }
+            .range-val-container:focus-within { border-color: var(--theme-color); box-shadow: 0 0 0 2px rgba(0, 255, 204, 0.15); background: rgba(0,0,0,0.4); }
+            .range-val-input { background: transparent; border: none; color: #fff; font-weight: 600; font-family: monospace; width: 45px; text-align: right; outline: none; font-size: 13px; }
+            .range-unit { color: #94a3b8; font-size: 12px; margin-left: 4px; font-weight: 500; }
+            
             .gd-range { -webkit-appearance: none; width: 100%; height: 4px; background: rgba(255, 255, 255, 0.1); border-radius: 4px; outline: none; }
-            .gd-range::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: var(--theme-color); cursor: pointer; transition: 0.1s; }
-            .gd-range::-webkit-slider-thumb:hover { transform: scale(1.2); }
+            .gd-range::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 3px solid var(--theme-color); cursor: pointer; transition: transform 0.1s, box-shadow 0.2s; }
+            .gd-range::-webkit-slider-thumb:hover { transform: scale(1.1); box-shadow: var(--text-glow); }
 
-            .gd-select { background: rgba(0,0,0,0.5); color: #fff; border: 1px solid rgba(255,255,255,0.2); padding: 4px 6px; border-radius: 4px; outline: none; cursor: pointer; font-family: inherit; font-size: 11px; }
-            .gd-select:focus { border-color: var(--theme-color); }
+            .gd-select { background: rgba(0,0,0,0.3); color: #fff; border: 1px solid rgba(255,255,255,0.1); padding: 8px 12px; border-radius: 8px; outline: none; cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 500; transition: all 0.2s; }
+            .gd-select:focus { border-color: var(--theme-color); box-shadow: 0 0 0 2px rgba(0, 255, 204, 0.15); }
+            .gd-select option { background: #1a1a24; }
 
-            .gd-btn { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #fff; padding: 8px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; transition: 0.2s; text-align: center; }
-            .gd-btn:hover { background: rgba(255,255,255,0.1); border-color: var(--theme-color); color: var(--theme-color); }
-            .btn-group { display: flex; gap: 10px; }
-            .btn-group .gd-btn { flex: 1; }
+            .gd-btn { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #f8fafc; padding: 10px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600; transition: all 0.2s ease; text-align: center; }
+            .gd-btn:hover { background: rgba(255,255,255,0.1); border-color: var(--theme-color); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+            .gd-btn:active { transform: translateY(0); }
+            .btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
+            .btn-group .gd-btn { flex: 1; min-width: 60px; padding: 8px; font-size: 12px; }
 
-            .gd-footer { background: rgba(0,0,0,0.7); padding: 10px; font-size: 10px; color: rgba(255,255,255,0.5); text-align: center; border-bottom-left-radius: 12px; border-bottom-right-radius: 12px; flex-shrink: 0; cursor: move; }
+            .gd-footer { background: rgba(0, 0, 0, 0.2); padding: 14px; font-size: 11px; color: #64748b; text-align: center; border-bottom-left-radius: 14px; border-bottom-right-radius: 14px; flex-shrink: 0; cursor: move; border-top: 1px solid var(--panel-border); font-weight: 500; letter-spacing: 0.5px; }
             
-            #gd-aim-line { position: absolute; top: 50%; left: 0; width: 100%; height: 1px; background: var(--theme-color); box-shadow: 0 0 5px var(--theme-color); pointer-events: none; z-index: 9999; display: none; }
-            #gd-grid-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-image: linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px); background-size: 50px 50px; pointer-events: none; z-index: 9998; display: none; }
-            #gd-flashlight-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(circle at 50% 50%, transparent 80px, rgba(0,0,0,0.98) 120px); pointer-events: none; z-index: 9998; display: none; }
-            #gd-cinematic-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; box-shadow: inset 0 120px 0 #000, inset 0 -120px 0 #000; pointer-events: none; z-index: 9998; display: none; }
-            #gd-vignette-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(circle, transparent 40%, rgba(0,0,0,0.9) 100%); pointer-events: none; z-index: 9998; display: none; }
+            /* Overlays */
+            #gd-aim-line { position: absolute; top: 50%; left: 0; width: 100%; height: 1px; background: var(--theme-color); box-shadow: var(--text-glow); pointer-events: none; z-index: 9999; display: none; }
+            #gd-grid-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background-image: linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px); background-size: ${config.gridSize}px ${config.gridSize}px; pointer-events: none; z-index: 9998; display: none; }
+            #gd-flashlight-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(circle at 50% 50%, transparent ${config.flashlightRadius}px, rgba(0,0,0,0.98) ${config.flashlightRadius + 50}px); pointer-events: none; z-index: 9998; display: none; }
+            #gd-cinematic-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; box-shadow: inset 0 135px 0 #000, inset 0 -135px 0 #000; pointer-events: none; z-index: 9998; display: none; }
+            #gd-vignette-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(circle, transparent 40%, rgba(0,0,0,0.95) 100%); pointer-events: none; z-index: 9998; display: none; }
+            
+            #gd-crosshair-overlay { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none; z-index: 10000; display: none; }
+            .ch-dot { width: 6px; height: 6px; background: var(--crosshair-color, #00ffcc); border-radius: 50%; box-shadow: 0 0 6px var(--crosshair-color, #00ffcc); }
+            .ch-cross { position: relative; width: 20px; height: 20px; }
+            .ch-cross::before, .ch-cross::after { content: ''; position: absolute; background: var(--crosshair-color, #00ffcc); box-shadow: 0 0 4px var(--crosshair-color, #00ffcc); }
+            .ch-cross::before { top: 9px; left: 0; width: 20px; height: 2px; }
+            .ch-cross::after { top: 0; left: 9px; width: 2px; height: 20px; }
+            .ch-reticle { width: 16px; height: 16px; border: 2px solid var(--crosshair-color, #00ffcc); border-radius: 50%; box-shadow: 0 0 5px var(--crosshair-color, #00ffcc); position: relative; }
+            .ch-reticle::before { content: ''; position: absolute; top: 50%; left: 50%; width: 4px; height: 4px; background: var(--crosshair-color, #00ffcc); border-radius: 50%; transform: translate(-50%, -50%); }
         `;
         document.head.appendChild(style);
 
@@ -245,116 +282,173 @@
             
             <div class="gd-content-wrapper pos-${config.tabPosition}" id="gd-content-wrapper">
                 <div class="gd-tabs">
-                    <div class="gd-tab active" data-target="tab-main">Main</div>
+                    <div class="sidebar-header">
+                        <div class="sidebar-title">WAVE</div>
+                        <div class="sidebar-subtitle">Premium</div>
+                    </div>
+                    
+                    <div class="gd-tab active" data-target="tab-main">Engine</div>
                     <div class="gd-tab" data-target="tab-visuals">Visuals</div>
                     <div class="gd-tab" data-target="tab-macros">Macros</div>
-                    <div class="gd-tab" data-target="tab-training">Training</div>
-                    <div class="gd-tab" data-target="tab-mods">Mods</div>
+                    <div class="gd-tab" data-target="tab-training">Assist</div>
+                    <div class="gd-tab" data-target="tab-mods">Chaos</div>
                     <div class="gd-tab" data-target="tab-config">Config</div>
+                    
+                    <div class="sidebar-footer">
+                        <div class="status-dot"></div>
+                        <div class="status-text">SYSTEM ONLINE</div>
+                    </div>
                 </div>
 
                 <div class="gd-body">
                     <div class="tab-content active" id="tab-main">
-                        <div class="section-title">Engine Speed</div>
-                        ${createSlider('Base Speed', 'baseSpeed', 0.1, 3.0, 0.05, 'x')}
-                        ${createSlider('Focus Speed (Shift)', 'focusSpeed', 0.1, 1.0, 0.05, 'x')}
-                        ${createToggle('Freeze Time', 'timeFreeze', 'Halts the game completely')}
+                        <div class="section-title">Engine Speeds</div>
+                        ${createSlider('Base Engine Clock Speed', 'baseSpeed', 0.05, 5.0, 0.05, 'x')}
+                        ${createSlider('Focus Speed Multiplier (Shift)', 'focusSpeed', 0.05, 1.0, 0.05, 'x')}
+                        ${createToggle('Complete Time Freeze', 'timeFreeze', 'Halts all game physics instantly')}
                         
-                        <div class="section-title">Time Skip & Loops</div>
-                        <div class="gd-btn" id="btn-timeskip" style="border-color: #ffcc00; color: #ffcc00; margin-bottom: 8px;">Skip 24 Hours [Takes 1 Second]</div>
-                        ${createToggle('Loop 1 Week / Sec', 'loopWeek', 'Continuously runs game at 7 days every 1 second')}
+                        <div class="section-title">Engine Skips & Automation Loops</div>
+                        <div class="gd-btn" id="btn-timeskip" style="border-color: #fbbf24; color: #fbbf24;">Skip 24 Clock Hours [Instant Burst]</div>
+                        ${createToggle('Loop 1 Week Per Second', 'loopWeek', 'Forces calculation of 7 full days each second')}
 
-                        <div class="section-title">Performance Opts</div>
-                        ${createToggle('FPS Unlocker', 'fpsUnlocker', 'Bypasses browser monitor V-Sync caps')}
-                        ${createToggle('Anti-Lag Mode', 'antiLag', 'Optimizes GPU canvas buffers')}
+                        <div class="section-title">Performance Core Opts</div>
+                        ${createToggle('FPS V-Sync Unlocker', 'fpsUnlocker', 'Bypasses browser refresh-rate limitations')}
+                        ${createToggle('Anti-Lag Optimization', 'antiLag', 'Prunes canvas layout checks to clear stutter')}
 
-                        <div class="section-title">Wave Stats</div>
-                        <div class="mod-row"><span class="mod-label">Session Clicks</span><span class="range-val" id="stat-clicks">0</span></div>
-                        <div class="mod-row"><span class="mod-label">Session Time</span><span class="range-val" id="stat-time">00:00</span></div>
+                        <div class="section-title">Telemetry Diagnostics</div>
+                        <div class="mod-row"><span class="mod-label">Session Clicks</span><span id="stat-clicks" style="color:var(--theme-color); font-weight:bold; font-family:monospace; font-size: 14px;">0</span></div>
+                        <div class="mod-row"><span class="mod-label">Execution Time</span><span id="stat-time" style="color:var(--theme-color); font-weight:bold; font-family:monospace; font-size: 14px;">00:00</span></div>
                     </div>
 
                     <div class="tab-content" id="tab-visuals">
-                        <div class="section-title">Wave Colors</div>
-                        ${createToggle('Rainbow Mode', 'rainbowMode', 'Cycles canvas hue automatically')}
-                        ${createSlider('Rainbow Speed', 'rainbowSpeed', 0.5, 10.0, 0.5, 'x')}
+                        <div class="warning-box">
+                            <span style="font-size: 16px;">⚠</span> 
+                            <span>Canvas Transforms and Filters are forcefully disabled while <b>Anti-Lag Optimization</b> is active in the Engine tab.</span>
+                        </div>
                         
-                        <div class="section-title">Transforms & Filters</div>
-                        ${createSlider('FOV / Zoom', 'zoom', 0.3, 2.0, 0.05, 'x')}
-                        ${createSlider('Rotation', 'rotation', -180, 180, 1, '°')}
-                        ${createToggle('Invert Gravity (Flip Y)', 'invertY')}
-                        ${createToggle('Mirror Mode (Flip X)', 'invertX')}
-                        ${createSlider('Brightness', 'brightness', 10, 200, 1, '%')}
-                        ${createSlider('Contrast', 'contrast', 10, 200, 1, '%')}
-                        ${createSlider('Saturation', 'saturation', 0, 300, 1, '%')}
-                        ${createSlider('Static Hue Shift', 'hue', 0, 360, 1, '°')}
-                        ${createSlider('Blur', 'blur', 0, 10, 0.5, 'px')}
-                        ${createSlider('Invert Colors', 'invertColors', 0, 100, 1, '%')}
+                        <div class="section-title">Color Modifiers</div>
+                        ${createToggle('Chroma RGB UI Mode', 'chromaTheme', 'Continuously shifts client colors')}
+                        ${createToggle('Rainbow Game Canvas Mode', 'rainbowMode', 'Cycles canvas color matrix automatically')}
+                        ${createSlider('Rainbow Multiplier Speed', 'rainbowSpeed', 0.5, 15.0, 0.5, 'x')}
+                        
+                        <div class="section-title">Canvas Transforms & Filters</div>
+                        ${createSlider('Field of View / Zoom', 'zoom', 0.2, 3.0, 0.05, 'x')}
+                        ${createSlider('Z-Axis Rotation', 'rotation', -180, 180, 1, '°')}
+                        ${createToggle('Mirror Screen Coordinate (Flip X)', 'invertX')}
+                        ${createToggle('Invert Gravity Render (Flip Y)', 'invertY')}
+                        ${createSlider('Exposure / Brightness', 'brightness', 10, 250, 5, '%')}
+                        ${createSlider('Color Saturation Intensity', 'saturation', 0, 400, 5, '%')}
+                        ${createSlider('Image Contrast Value', 'contrast', 10, 250, 5, '%')}
+                        ${createSlider('Static Hue Target Shift', 'hue', 0, 360, 5, '°')}
+                        ${createSlider('Hardware Blur Filter', 'blur', 0, 15, 0.5, 'px')}
+                        ${createSlider('Invert Color Matrix', 'invertColors', 0, 100, 5, '%')}
+                        ${createSlider('Grayscale Profile', 'grayscale', 0, 100, 5, '%')}
+                        ${createSlider('Sepia Retro Filter', 'sepia', 0, 100, 5, '%')}
 
-                        <div class="section-title">Wave Overlays</div>
-                        ${createToggle('Show Center Path (Aim Line)', 'showAimLine')}
-                        ${createToggle('Show Grid Map', 'showGrid')}
+                        <div class="section-title">Canvas HUD Overlays</div>
+                        ${createToggle('Display Target Tracking Path Line', 'showAimLine')}
+                        ${createToggle('Display Level Map Grid Vector', 'showGrid')}
+                        ${createSlider('Grid Mesh Dimension Scaling', 'gridSize', 20, 150, 5, 'px')}
                     </div>
 
                     <div class="tab-content" id="tab-macros">
-                        <div class="section-title">Wave Auto-Clicker</div>
-                        ${createToggle('Enable Auto-Clicker (Hold C)', 'autoClickerActive', 'Spams precisely at target CPS')}
-                        ${createSlider('Target Speed', 'autoClickerCPS', 1, 150, 1, ' CPS')}
-                        ${createToggle('Jitter Click Simulation', 'jitterClick', 'Adds random MS variance to bypass macro detection')}
+                        <div class="section-title">Wave Input Spammer</div>
+                        ${createToggle('Enable Input Auto-Clicker', 'autoClickerActive', 'Fires input signals precisely at standard targets')}
+                        ${createSlider('Target CPS Calculation Rate', 'autoClickerCPS', 1, 200, 1, ' CPS')}
+                        ${createToggle('Jitter Variance Matrix', 'jitterClick', 'Alters click delay maps to emulate human inputs')}
+                        ${createSlider('Jitter Displacement Amplitude', 'jitterIntensity', 1, 15, 1, 'ms')}
                     </div>
 
                     <div class="tab-content" id="tab-training">
-                        <div class="section-title">Visibility</div>
-                        ${createSlider('Ghost Mode (Opacity)', 'ghostMode', 10, 100, 1, '%')}
+                        <div class="section-title">Target Assistance</div>
+                        ${createSlider('Canvas Overlay Opacity (Ghost)', 'ghostMode', 5, 100, 5, '%')}
                         
-                        <div class="section-title">Slow-Mo Presets</div>
+                        <div class="section-title">Speed Control Hub</div>
                         <div class="btn-group">
+                            <div class="gd-btn preset-btn" data-speed="0.1">0.10x</div>
                             <div class="gd-btn preset-btn" data-speed="0.25">0.25x</div>
                             <div class="gd-btn preset-btn" data-speed="0.5">0.50x</div>
                             <div class="gd-btn preset-btn" data-speed="0.75">0.75x</div>
                             <div class="gd-btn preset-btn" data-speed="1.0">1.00x</div>
+                            <div class="gd-btn preset-btn" data-speed="1.5">1.50x</div>
+                            <div class="gd-btn preset-btn" data-speed="2.0">2.00x</div>
                         </div>
+
+                        <div class="section-title">Crosshair Config</div>
+                        ${createToggle('Enable Custom Fixed Crosshair', 'showCrosshair')}
+                        ${createSelect('Crosshair Style Profile', 'crosshairType', [
+                            { value: 'dot', text: 'Center Precision Dot' },
+                            { value: 'cross', text: 'Tactical Plus Cross' },
+                            { value: 'reticle', text: 'Aviation Spec Reticle' }
+                        ])}
+                        ${createSelect('Crosshair Color Assignment', 'crosshairColor', [
+                            { value: '#00ffcc', text: 'Hyper Cyan' },
+                            { value: '#ef4444', text: 'Crimson Red' },
+                            { value: '#10b981', text: 'Matrix Green' },
+                            { value: '#eab308', text: 'Vibrant Yellow' },
+                            { value: '#ffffff', text: 'Solid White' }
+                        ])}
                     </div>
 
                     <div class="tab-content" id="tab-mods">
-                        <div class="section-title">Movement Chaos</div>
-                        ${createToggle('Earthquake', 'earthquake', 'Violent screen shake')}
+                        <div class="section-title">Displacement Modifiers</div>
+                        ${createToggle('Seismic Canvas Earthquake', 'earthquake', 'Simulates intense viewport disturbances')}
+                        ${createSlider('Earthquake Vector Intensity', 'earthquakeIntensity', 1, 25, 1, 'px')}
                         
-                        <div class="section-title">Visual Chaos</div>
-                        ${createToggle('Deep Fried', 'deepFried', 'Max contrast and saturation')}
+                        <div class="section-title">Color Overload</div>
+                        ${createToggle('Deep Fried Artifact Profiler', 'deepFried', 'Pushes contrast configurations past boundaries')}
                         
-                        <div class="section-title">Vision Restrictor</div>
-                        ${createToggle('Flashlight Mode', 'flashlight', 'Pitch black except for the center')}
-                        ${createToggle('Cinematic Bars', 'cinematic', 'Restricts vertical vision completely')}
-                        ${createToggle('Heavy Vignette', 'vignette', 'Darkens the outer edges to limit sight')}
+                        <div class="section-title">Sight Impediments</div>
+                        ${createToggle('Spotlight Flashlight Mode', 'flashlight', 'Obscures entire field except localized circle')}
+                        ${createSlider('Flashlight Viewport Radius', 'flashlightRadius', 30, 200, 5, 'px')}
+                        ${createToggle('Cinematic Aspect Masking', 'cinematic', 'Applies widescreen horizontal focal blocks')}
+                        ${createToggle('High Gradient Vignette', 'vignette', 'Darkens perspective perimeters smoothly')}
                     </div>
 
                     <div class="tab-content" id="tab-config">
-                        <div class="section-title">UI Layout</div>
-                        ${createSelect('Tab Position', 'tabPosition', [
-                            { value: 'top', text: 'Top (Default)' },
-                            { value: 'bottom', text: 'Bottom' },
+                        <div class="section-title">Interface Orientation</div>
+                        ${createSelect('Navigation Tab Position', 'tabPosition', [
                             { value: 'left', text: 'Left Sidebar' },
-                            { value: 'right', text: 'Right Sidebar' }
+                            { value: 'right', text: 'Right Sidebar' },
+                            { value: 'top', text: 'Top Horizontal' }
                         ])}
 
-                        <div class="section-title">UI Appearance</div>
-                        ${createSlider('Menu Opacity', 'menuOpacity', 0.3, 1.0, 0.05, '')}
+                        <div class="section-title">Interface Density</div>
+                        ${createSlider('Menu Alpha Transparency', 'menuOpacity', 0.2, 1.0, 0.02, '')}
                         
-                        <div class="section-title">Save Management</div>
-                        <div class="gd-btn" id="btn-save">Save Wave Profile</div>
-                        <div class="gd-btn" id="btn-load">Reload Profile</div>
-                        <div class="gd-btn" style="border-color:#ff4d4d; color:#ff4d4d; margin-top:5px;" id="btn-reset">Hard Reset</div>
+                        <div class="section-title">System Visuals</div>
+                        ${createSelect('Real Cursor Style', 'realCursor', [
+                            { value: 'default', text: 'System Default' },
+                            { value: 'crosshair', text: 'Target Crosshair' },
+                            { value: 'pointer', text: 'Hand Pointer' },
+                            { value: 'none', text: 'Hidden completely' }
+                        ])}
+
+                        <div class="section-title">Macro Inputs</div>
+                        <div class="mod-row">
+                            <span class="mod-label">Toggle Menu Bind<span class="mod-subtext">Click save after edit</span></span>
+                            <input type="text" class="gd-select" style="width: 50px; text-align:center;" id="inp-toggleKey" value="${config.toggleKey.toUpperCase()}" maxlength="1">
+                        </div>
+                        <div class="mod-row">
+                            <span class="mod-label">Macro Click Bind<span class="mod-subtext">Hold key down to trigger</span></span>
+                            <input type="text" class="gd-select" style="width: 50px; text-align:center;" id="inp-macroKey" value="${config.macroKey.toUpperCase()}" maxlength="1">
+                        </div>
+
+                        <div class="section-title">Profile Database</div>
+                        <div class="gd-btn" id="btn-save">Save Profile Settings</div>
+                        <div class="gd-btn" id="btn-load">Reload Settings Profile</div>
+                        <div class="gd-btn" style="border-color:#ef4444; color:#ef4444; margin-top:8px;" id="btn-reset">Wipe Configuration Cache</div>
                     </div>
                 </div>
             </div>
-            <div class="gd-footer" id="gd-footer-handle">Press [M] to Hide UI | Built for Wave Players</div>
+            <div class="gd-footer" id="gd-footer-handle">Press your designated UI key to hide menu</div>
         `;
         document.body.appendChild(menu);
         
         requestAnimationFrame(() => {
             setTimeout(() => {
                 menu.classList.add('menu-visible');
-            }, 10);
+            }, 50);
         });
 
         setupTabSwitching();
@@ -364,7 +458,13 @@
     function createSlider(label, key, min, max, step, unit) {
         return `
         <div class="range-container">
-            <div class="range-header"><span>${label}</span><span id="txt-${key}" class="range-val">${config[key]}${unit}</span></div>
+            <div class="range-header">
+                <span>${label}</span>
+                <div class="range-val-container">
+                    <input type="text" class="range-val-input" id="num-${key}" data-key="${key}" data-min="${min}" data-max="${max}" value="${config[key]}">
+                    <span class="range-unit">${unit}</span>
+                </div>
+            </div>
             <input type="range" min="${min}" max="${max}" step="${step}" value="${config[key]}" class="gd-range" id="sl-${key}" data-key="${key}" data-unit="${unit}">
         </div>`;
     }
@@ -381,7 +481,7 @@
     function createSelect(label, key, options) {
         let optsHTML = options.map(opt => `<option value="${opt.value}" ${config[key] === opt.value ? 'selected' : ''}>${opt.text}</option>`).join('');
         return `
-        <div class="mod-row" style="margin-bottom: 5px;">
+        <div class="mod-row">
             <div class="mod-label">${label}</div>
             <select class="gd-select" data-key="${key}">
                 ${optsHTML}
@@ -390,7 +490,7 @@
     }
 
     // =========================================================
-    // 4. LOGIC & GAME LOOP
+    // 4. PIPELINE REDUCTION LOGIC
     // =========================================================
     let canvasTarget = null;
     let unityContainer = null;
@@ -405,53 +505,85 @@
             tab.addEventListener('click', () => {
                 tabs.forEach(t => t.classList.remove('active'));
                 contents.forEach(c => c.classList.remove('active'));
+                
                 tab.classList.add('active');
-                document.getElementById(tab.dataset.target).classList.add('active');
+                const targetContent = document.getElementById(tab.dataset.target);
+                targetContent.classList.add('active');
             });
         });
     }
 
+    let lastFilterString = "";
+    let lastTransformString = "";
+
     function applyAllVisuals() {
         if (!canvasTarget) canvasTarget = document.querySelector("#unity-canvas");
+        
+        document.body.style.cursor = config.realCursor;
+        if(canvasTarget) canvasTarget.style.cursor = config.realCursor;
+        
         if (!canvasTarget) return;
 
         canvasTarget.style.opacity = config.ghostMode / 100;
         canvasTarget.style.transition = 'none';
 
-        // Anti-Lag hardware acceleration optimizations
+        let appliedAlpha = config.antiLag ? 1.0 : config.menuOpacity;
+        document.documentElement.style.setProperty('--bg-color', `rgba(18, 18, 24, ${appliedAlpha})`);
+
         if (config.antiLag) {
-            canvasTarget.style.imageRendering = 'pixelated';
-            canvasTarget.style.willChange = 'transform';
-            document.documentElement.style.setProperty('--menu-alpha', '1.0'); 
+            if (canvasTarget.style.imageRendering !== 'pixelated') canvasTarget.style.imageRendering = 'pixelated';
+            if (canvasTarget.style.willChange !== 'transform') canvasTarget.style.willChange = 'transform';
+            
             const menuEl = document.getElementById('gd-standalone-menu');
-            if (menuEl) menuEl.style.backdropFilter = 'none'; // Drops costly blurs
+            if (menuEl && menuEl.style.backdropFilter !== 'none') menuEl.style.backdropFilter = 'none';
         } else {
-            canvasTarget.style.imageRendering = 'auto';
-            canvasTarget.style.willChange = 'auto';
-            document.documentElement.style.setProperty('--menu-alpha', config.menuOpacity);
+            if (canvasTarget.style.imageRendering !== 'auto') canvasTarget.style.imageRendering = 'auto';
+            if (canvasTarget.style.willChange !== 'auto') canvasTarget.style.willChange = 'auto';
+            
             const menuEl = document.getElementById('gd-standalone-menu');
-            if (menuEl) menuEl.style.backdropFilter = 'blur(15px)';
+            if (menuEl && menuEl.style.backdropFilter !== 'blur(24px) saturate(140%)') menuEl.style.backdropFilter = 'blur(24px) saturate(140%)';
         }
 
-        const aimLine = document.getElementById('gd-aim-line');
+        const elementsWithDisplayToggles = [
+            { id: 'gd-aim-line', active: config.showAimLine },
+            { id: 'gd-grid-overlay', active: config.showGrid },
+            { id: 'gd-flashlight-overlay', active: config.flashlight },
+            { id: 'gd-cinematic-overlay', active: config.cinematic },
+            { id: 'gd-vignette-overlay', active: config.vignette },
+            { id: 'gd-crosshair-overlay', active: config.showCrosshair }
+        ];
+
+        elementsWithDisplayToggles.forEach(item => {
+            const el = document.getElementById(item.id);
+            if (el) {
+                const calculatedDisplay = item.active ? 'block' : 'none';
+                if (el.style.display !== calculatedDisplay) el.style.display = calculatedDisplay;
+            }
+        });
+
         const grid = document.getElementById('gd-grid-overlay');
-        const flashlight = document.getElementById('gd-flashlight-overlay');
-        const cinematic = document.getElementById('gd-cinematic-overlay');
-        const vignette = document.getElementById('gd-vignette-overlay');
-        
-        if (aimLine) aimLine.style.display = config.showAimLine ? 'block' : 'none';
-        if (grid) grid.style.display = config.showGrid ? 'block' : 'none';
-        if (flashlight) flashlight.style.display = config.flashlight ? 'block' : 'none';
-        if (cinematic) cinematic.style.display = config.cinematic ? 'block' : 'none';
-        if (vignette) vignette.style.display = config.vignette ? 'block' : 'none';
+        if (grid && config.showGrid) {
+            grid.style.backgroundSize = `${config.gridSize}px ${config.gridSize}px`;
+        }
+
+        const flash = document.getElementById('gd-flashlight-overlay');
+        if (flash && config.flashlight) {
+            flash.style.background = `radial-gradient(circle at 50% 50%, transparent ${config.flashlightRadius}px, rgba(0,0,0,0.98) ${config.flashlightRadius + 50}px)`;
+        }
+
+        const ch = document.getElementById('gd-crosshair-overlay');
+        if (ch && config.showCrosshair) {
+            document.documentElement.style.setProperty('--crosshair-color', config.crosshairColor);
+            if (!ch.querySelector(`.ch-${config.crosshairType}`)) {
+                ch.innerHTML = `<div class="ch-${config.crosshairType}"></div>`;
+            }
+        }
     }
 
     function syncSpeedMultiplier() {
-        if (isTimeSkipping) return; // Block input engine adjustments during burst skip
-        
+        if (isTimeSkipping) return; 
         if (config.loopWeek) {
-            // 7 days = 604800 seconds. Processed over 1 second = 604800x speed
-            speedMultiplier = 604800;
+            speedMultiplier = 604800; 
         } else if (shiftHeld) {
             speedMultiplier = config.focusSpeed;
         } else {
@@ -460,16 +592,49 @@
     }
 
     function setupInputListeners() {
+        // FIXED: Stop spacebar from toggling inputs unexpectedly while gaming
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && document.activeElement) {
+                const tag = document.activeElement.tagName;
+                const type = document.activeElement.type;
+                if ((tag === 'INPUT' && (type === 'checkbox' || type === 'range')) || tag === 'BUTTON' || document.activeElement.classList.contains('gd-btn')) {
+                    e.preventDefault();
+                }
+            }
+        });
+
         document.querySelectorAll('.gd-range').forEach(sl => {
             sl.addEventListener('input', (e) => {
                 const key = e.target.dataset.key;
                 const val = parseFloat(e.target.value);
                 config[key] = val;
-                document.getElementById(`txt-${key}`).innerText = val + e.target.dataset.unit;
                 
-                if (key === 'baseSpeed' || key === 'focusSpeed') {
-                    syncSpeedMultiplier();
-                }
+                const numInput = document.getElementById(`num-${key}`);
+                if(numInput) numInput.value = val;
+                
+                if (key === 'baseSpeed' || key === 'focusSpeed') syncSpeedMultiplier();
+                if (key !== 'rainbowSpeed') applyAllVisuals();
+            });
+        });
+        
+        document.querySelectorAll('.range-val-input').forEach(inp => {
+            inp.addEventListener('change', (e) => {
+                const key = e.target.dataset.key;
+                let val = parseFloat(e.target.value);
+                const min = parseFloat(e.target.dataset.min);
+                const max = parseFloat(e.target.dataset.max);
+                
+                if (isNaN(val)) val = config[key]; 
+                if (val < min) val = min;
+                if (val > max) val = max;
+                
+                e.target.value = val; 
+                config[key] = val;
+                
+                const slider = document.getElementById(`sl-${key}`);
+                if (slider) slider.value = val;
+                
+                if (key === 'baseSpeed' || key === 'focusSpeed') syncSpeedMultiplier();
                 if (key !== 'rainbowSpeed') applyAllVisuals();
             });
         });
@@ -478,10 +643,9 @@
             tg.addEventListener('change', (e) => {
                 const key = e.target.dataset.key;
                 config[key] = e.target.checked;
+                e.target.blur(); // Drop focus
                 
-                if (key === 'loopWeek') {
-                    syncSpeedMultiplier();
-                }
+                if (key === 'loopWeek') syncSpeedMultiplier();
                 applyAllVisuals();
             });
         });
@@ -493,6 +657,8 @@
                 if (key === 'tabPosition') {
                     document.getElementById('gd-content-wrapper').className = `gd-content-wrapper pos-${config.tabPosition}`;
                 }
+                applyAllVisuals();
+                e.target.blur();
             });
         });
 
@@ -502,50 +668,56 @@
                 config.baseSpeed = speed;
                 syncSpeedMultiplier(); 
                 document.getElementById('sl-baseSpeed').value = speed;
-                document.getElementById('txt-baseSpeed').innerText = speed.toFixed(2) + 'x';
+                document.getElementById('num-baseSpeed').value = speed;
             });
         });
 
-        // 24 Hour Engine Time Skip Logic
         document.getElementById('btn-timeskip').addEventListener('click', (e) => {
-            if (isTimeSkipping || config.loopWeek) return; // Block button click if loop is already active
+            if (isTimeSkipping || config.loopWeek) return; 
             isTimeSkipping = true;
             
             const btn = e.target;
-            const previousText = btn.innerText;
-            btn.innerText = "Skipping Time... Please Wait";
-            btn.style.borderColor = "#ff4d4d";
-            btn.style.color = "#ff4d4d";
+            const originalText = btn.innerText;
+            btn.innerText = "Processing Telemetry Matrix Skips...";
+            btn.style.borderColor = "#ef4444";
+            btn.style.color = "#ef4444";
 
-            // 24 hours = 86400 seconds. Processed over 1 second = 86400x multiplier
             speedMultiplier = 86400;
 
             setTimeout(() => {
                 isTimeSkipping = false;
-                syncSpeedMultiplier(); // Revert back safely
-                btn.innerText = previousText;
-                btn.style.borderColor = "#ffcc00";
-                btn.style.color = "#ffcc00";
+                syncSpeedMultiplier(); 
+                btn.innerText = originalText;
+                btn.style.borderColor = "#fbbf24";
+                btn.style.color = "#fbbf24";
             }, 1000);
         });
 
-        document.getElementById('btn-save').addEventListener('click', saveConfig);
+        document.getElementById('btn-save').addEventListener('click', () => {
+            const tKey = document.getElementById('inp-toggleKey').value.toLowerCase();
+            const mKey = document.getElementById('inp-macroKey').value.toLowerCase();
+            if(tKey) config.toggleKey = tKey;
+            if(mKey) config.macroKey = mKey;
+            saveConfig();
+        });
+        
         document.getElementById('btn-load').addEventListener('click', () => { loadConfig(); location.reload(); });
         document.getElementById('btn-reset').addEventListener('click', resetConfig);
 
         document.addEventListener('keydown', (e) => {
-            if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+            if (e.target.tagName === 'INPUT' && e.target.type === 'text' || e.target.tagName === 'SELECT') return;
             if (e.key === 'Shift') { 
                 shiftHeld = true; 
                 syncSpeedMultiplier(); 
             }
-            if (e.key.toLowerCase() === 'm') {
+            if (e.key.toLowerCase() === config.toggleKey) {
                 const menu = document.getElementById('gd-standalone-menu');
-                menu.classList.toggle('menu-hidden');
+                if (menu) menu.classList.toggle('menu-hidden');
             }
         });
 
         document.addEventListener('keyup', (e) => {
+            if (e.target.tagName === 'INPUT' && e.target.type === 'text' || e.target.tagName === 'SELECT') return;
             if (e.key === 'Shift') { 
                 shiftHeld = false; 
                 syncSpeedMultiplier(); 
@@ -559,9 +731,12 @@
         });
     }
 
-    // --- ACCURATE WAVE MACRO ---
+    // =========================================================
+    // 5. INPUT SPOOFING ROUTER
+    // =========================================================
     function simulateKey(state) {
         if (!canvasTarget) return;
+
         const ev = new KeyboardEvent(state, { bubbles: true, keyCode: 32, code: 'Space', key: ' ' });
         canvasTarget.dispatchEvent(ev);
     }
@@ -578,27 +753,33 @@
         let cps = Math.max(1, config.autoClickerCPS);
         let delay = 1000 / cps; 
 
-        if (config.jitterClick) delay += (Math.random() * 6 - 3);
+        if (config.jitterClick) {
+            const intensity = config.jitterIntensity;
+            delay += (Math.random() * (intensity * 2) - intensity);
+        }
 
         simulateKey('keydown');
-        setTimeout(() => simulateKey('keyup'), Math.min(delay / 2, 20)); 
+        setTimeout(() => simulateKey('keyup'), Math.max(5, Math.min(delay / 2, 25))); 
 
-        autoClickTimer = setTimeout(triggerAutoClick, delay);
+        autoClickTimer = setTimeout(triggerAutoClick, Math.max(1, delay));
     }
 
     document.addEventListener('keydown', e => { 
-        if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
-        if (e.key.toLowerCase() === 'c' && !spamKeyHeld) { 
+        if (e.target.tagName === 'INPUT' && e.target.type === 'text' || e.target.tagName === 'SELECT') return;
+        if (e.key.toLowerCase() === config.macroKey && !spamKeyHeld) { 
             spamKeyHeld = true; 
             if (!autoClickTimer) triggerAutoClick();
         } 
     });
+    
     document.addEventListener('keyup', e => { 
-        if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
-        if (e.key.toLowerCase() === 'c') spamKeyHeld = false; 
+        if (e.target.tagName === 'INPUT' && e.target.type === 'text' || e.target.tagName === 'SELECT') return;
+        if (e.key.toLowerCase() === config.macroKey) spamKeyHeld = false; 
     });
 
-    // --- RENDER LOOP ---
+    // =========================================================
+    // 6. RENDER LOOP CONTROLS
+    // =========================================================
     function initGameLoopLogic() {
         canvasTarget = document.querySelector("#unity-canvas");
         unityContainer = document.querySelector("#unity-container");
@@ -614,6 +795,7 @@
                 <div id="gd-flashlight-overlay"></div>
                 <div id="gd-cinematic-overlay"></div>
                 <div id="gd-vignette-overlay"></div>
+                <div id="gd-crosshair-overlay"></div>
             `;
             if (!document.getElementById('gd-flashlight-overlay')) {
                 unityContainer.insertAdjacentHTML('beforeend', overlays);
@@ -622,13 +804,14 @@
 
         applyAllVisuals();
 
-        let lastTime = performance.now();
+        let lastTime = originalPerfNow();
         let frames = 0;
         let currentRainbowHue = config.hue;
+        let chromaHue = 180; 
         
         function updateLoop() {
             frames++;
-            const now = performance.now();
+            const now = originalPerfNow();
             
             if (now >= lastTime + 1000) {
                 const fps = Math.round((frames * 1000) / (now - lastTime));
@@ -637,17 +820,23 @@
                 frames = 0;
                 lastTime = now;
 
-                const elapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
+                const elapsed = Math.floor((originalDateNow() - sessionStartTime) / 1000);
                 const mins = String(Math.floor(elapsed / 60)).padStart(2, '0');
                 const secs = String(elapsed % 60).padStart(2, '0');
                 const timeEl = document.getElementById('stat-time');
                 if(timeEl) timeEl.innerText = `${mins}:${secs}`;
             }
 
+            if (config.chromaTheme) {
+                chromaHue = (chromaHue + 1) % 360;
+                const dynamicThemeColor = `hsl(${chromaHue}, 100%, 50%)`;
+                document.documentElement.style.setProperty('--theme-color', dynamicThemeColor);
+                document.documentElement.style.setProperty('--text-glow', `0 0 12px ${dynamicThemeColor}`);
+            }
+
             if (canvasTarget) {
-                // If Anti-Lag is turned on, skip heavy filter recalculations completely
                 if (config.antiLag) {
-                    canvasTarget.style.filter = 'none';
+                    if (canvasTarget.style.filter !== 'none') canvasTarget.style.filter = 'none';
                 } else {
                     let dynamicHue = config.hue;
                     let cContrast = config.contrast;
@@ -659,18 +848,16 @@
                     }
 
                     if (config.deepFried) {
-                        cContrast = Math.max(cContrast, 300);
-                        cSat = Math.max(cSat, 400);
+                        cContrast = 250;
+                        cSat = 400;
                     }
 
-                    canvasTarget.style.filter = `
-                        brightness(${config.brightness}%) 
-                        contrast(${cContrast}%) 
-                        saturate(${cSat}%) 
-                        hue-rotate(${dynamicHue}deg) 
-                        blur(${config.blur}px) 
-                        invert(${config.invertColors}%)
-                    `;
+                    const filterString = `brightness(${config.brightness}%) contrast(${cContrast}%) saturate(${cSat}%) hue-rotate(${dynamicHue}deg) blur(${config.blur}px) invert(${config.invertColors}%) grayscale(${config.grayscale}%) sepia(${config.sepia}%)`;
+                    
+                    if (lastFilterString !== filterString) {
+                        canvasTarget.style.filter = filterString;
+                        lastFilterString = filterString;
+                    }
                 }
 
                 let transX = 0;
@@ -680,20 +867,26 @@
                 let dynamicRot = config.rotation;
 
                 if (config.earthquake) {
-                    transX = (Math.random() * 10 - 5);
-                    transY = (Math.random() * 10 - 5);
+                    const amp = config.earthquakeIntensity;
+                    transX = (Math.random() * amp - (amp / 2));
+                    transY = (Math.random() * amp - (amp / 2));
                 }
 
-                canvasTarget.style.transform = `translate3d(${transX}px, ${transY}px, 0) scale(${scaleX}, ${scaleY}) rotate(${dynamicRot}deg)`;
+                const transformString = `translate3d(${transX}px, ${transY}px, 0) scale(${scaleX}, ${scaleY}) rotate(${dynamicRot}deg)`;
+                if (lastTransformString !== transformString) {
+                    canvasTarget.style.transform = transformString;
+                    lastTransformString = transformString;
+                }
             }
 
+            // Using standard rAF here ensures the loop itself still paces with the newly unlocked environment
             requestAnimationFrame(updateLoop);
         }
         requestAnimationFrame(updateLoop);
     }
 
     // =========================================================
-    // 5. WINDOW CONTROLS (OPTIMIZED DRAGGING)
+    // 7. DRAGGING
     // =========================================================
     function setupDragging() {
         const headerHandle = document.getElementById('gd-handle');
@@ -702,7 +895,7 @@
         
         let dragging = false;
         let startX = 0, startY = 0;
-        let menuLeft = 40, menuTop = window.innerHeight / 2; 
+        let menuLeft = 60, menuTop = window.innerHeight / 2; 
         let mouseX = 0, mouseY = 0;
 
         function onMouseDown(e) {
@@ -756,7 +949,7 @@
     function init() {
         buildModMenu();
         setupDragging();
-        setTimeout(initGameLoopLogic, 500); 
+        setTimeout(initGameLoopLogic, 400); 
     }
 
     if (document.readyState === 'complete' || document.readyState === 'interactive') {
