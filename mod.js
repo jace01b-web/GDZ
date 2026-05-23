@@ -9,7 +9,7 @@
         baseSpeed: 1.0,
         focusSpeed: 0.5,
         timeFreeze: false,
-        fpsUnlocker: true, 
+        fpsUnlocker: false, 
         antiLag: true,     
         loopWeek: false,    
         zoom: 1.0,
@@ -50,7 +50,8 @@
         chromaTheme: true, 
         tabPosition: 'left', 
         toggleKey: 'm',
-        macroKey: 'c'
+        macroKey: 'c',
+        showMobileControls: /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
     };
 
     function loadConfig() {
@@ -77,6 +78,8 @@
     // =========================================================
     let speedMultiplier = config.baseSpeed;
     let shiftHeld = false;
+    let mobileFocusActive = false;
+    let mobileMacroActive = false;
     let isTimeSkipping = false; 
     
     const originalPerfNow = performance.now.bind(performance);
@@ -103,7 +106,6 @@
         return Math.floor(dateFake);
     };
 
-    // FIXED: True FPS Unlocker using setTimeout bypass to uncap refresh rates
     const originalRAF = window.requestAnimationFrame.bind(window);
     const originalCAF = window.cancelAnimationFrame.bind(window);
     
@@ -125,7 +127,7 @@
     };
 
     // =========================================================
-    // 3. PREMIUM UI CONSTRUCTION (REDESIGNED)
+    // 3. PREMIUM UI CONSTRUCTION (REDESIGNED + MOBILE SUPPORT)
     // =========================================================
     function buildModMenu() {
         if (document.getElementById('gd-standalone-menu')) return;
@@ -139,12 +141,15 @@
                 --text-glow: 0 0 12px var(--theme-color);
                 --font-main: 'Inter', system-ui, -apple-system, sans-serif;
             }
+            
             #gd-standalone-menu {
                 position: fixed; 
-                top: 50%; 
-                left: 60px; 
+                top: 10vh; 
+                left: 10vw; 
                 width: 520px; 
-                height: 640px;
+                height: 600px;
+                max-width: 90vw;
+                max-height: 85vh;
                 background: var(--bg-color); 
                 backdrop-filter: blur(24px) saturate(140%); -webkit-backdrop-filter: blur(24px) saturate(140%);
                 border: 1px solid var(--panel-border); 
@@ -153,106 +158,171 @@
                 font-family: var(--font-main);
                 z-index: 9999999; 
                 box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
-                user-select: none; display: flex; flex-direction: column;
-                will-change: left, top, transform, opacity;
+                user-select: none; 
+                display: flex; 
+                flex-direction: column;
+                will-change: transform, opacity;
                 opacity: 0;
-                transform-origin: left center;
-                transform: translateY(-50%) scale(0.95) translateX(-20px);
-                transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
+                transform-origin: center;
+                transform: scale(0.95);
+                transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
             }
             
             #gd-standalone-menu.menu-visible {
                 opacity: 1;
-                transform: translateY(-50%) scale(1) translateX(0px);
+                transform: scale(1);
+                pointer-events: auto;
             }
             
             #gd-standalone-menu.menu-hidden {
                 opacity: 0 !important;
-                transform: translateY(-50%) scale(0.95) translateX(-20px) !important;
+                transform: scale(0.95) !important;
                 pointer-events: none !important;
+            }
+
+            /* Mobile Floating Toggle Button */
+            #gd-mobile-toggle {
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                width: 45px;
+                height: 45px;
+                background: var(--bg-color);
+                backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+                border: 2px solid var(--theme-color);
+                border-radius: 50%;
+                z-index: 10000000;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                cursor: pointer;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.5), var(--text-glow);
+                color: var(--theme-color);
+                font-size: 22px;
+                user-select: none;
+                touch-action: none;
+                transition: transform 0.1s, background 0.3s;
+            }
+            #gd-mobile-toggle:active {
+                transform: scale(0.9);
+                background: rgba(255,255,255,0.1);
+            }
+
+            /* Mobile On-Screen Action Toggles */
+            #gd-mobile-controls {
+                position: fixed;
+                bottom: 80px; 
+                right: 20px;
+                display: none; 
+                flex-direction: column;
+                gap: 15px;
+                z-index: 10000000;
+            }
+            .gd-mc-btn {
+                width: 45px; height: 45px;
+                background: var(--bg-color);
+                backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+                border: 2px solid var(--theme-color);
+                border-radius: 50%;
+                color: #fff;
+                display: flex; justify-content: center; align-items: center;
+                font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px;
+                box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+                user-select: none; touch-action: manipulation;
+                transition: all 0.2s ease;
+                cursor: pointer;
+            }
+            .gd-mc-btn.active {
+                background: var(--theme-color);
+                color: #121218;
+                box-shadow: var(--text-glow);
+                transform: scale(1.05);
             }
             
             .gd-header {
                 display: flex; justify-content: space-between; align-items: center;
                 background: rgba(0, 0, 0, 0.2);
-                padding: 18px 24px; cursor: move; 
+                padding: 14px 20px; cursor: move; 
                 border-top-left-radius: 14px; border-top-right-radius: 14px;
                 border-bottom: 1px solid var(--panel-border); flex-shrink: 0;
+                touch-action: none;
             }
-            .gd-title { font-weight: 800; font-size: 15px; color: #fff; letter-spacing: 2px; text-shadow: var(--text-glow); transition: text-shadow 0.3s; }
-            .gd-fps { font-family: monospace; color: #fff; font-size: 12px; font-weight: bold; background: rgba(0, 0, 0, 0.5); padding: 4px 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); }
+            .gd-title { font-weight: 800; font-size: 14px; color: #fff; letter-spacing: 2px; text-shadow: var(--text-glow); transition: text-shadow 0.3s; }
+            .gd-fps { font-family: monospace; color: #fff; font-size: 11px; font-weight: bold; background: rgba(0, 0, 0, 0.5); padding: 4px 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); }
             
             .gd-content-wrapper { display: flex; flex: 1; overflow: hidden; position: relative; }
-            .gd-tabs { display: flex; flex-direction: column; background: rgba(0, 0, 0, 0.15); flex-shrink: 0; transition: all 0.4s ease; border-right: 1px solid var(--panel-border); width: 140px; }
+            .gd-tabs { display: flex; flex-direction: column; background: rgba(0, 0, 0, 0.15); flex-shrink: 0; transition: all 0.4s ease; border-right: 1px solid var(--panel-border); width: 120px; }
             
-            .sidebar-header { padding: 24px 10px 16px; text-align: center; border-bottom: 1px solid var(--panel-border); margin-bottom: 8px; }
-            .sidebar-title { color: var(--theme-color); font-weight: 900; font-size: 16px; letter-spacing: 2px; text-shadow: var(--text-glow); }
-            .sidebar-subtitle { color: #64748b; font-size: 10px; font-weight: 600; text-transform: uppercase; margin-top: 6px; letter-spacing: 1px; }
-            .sidebar-footer { margin-top: auto; padding: 20px 10px; text-align: center; border-top: 1px solid var(--panel-border); background: rgba(0,0,0,0.1); }
+            .sidebar-header { padding: 16px 10px 12px; text-align: center; border-bottom: 1px solid var(--panel-border); margin-bottom: 8px; }
+            .sidebar-title { color: var(--theme-color); font-weight: 900; font-size: 14px; letter-spacing: 2px; text-shadow: var(--text-glow); }
+            .sidebar-subtitle { color: #64748b; font-size: 9px; font-weight: 600; text-transform: uppercase; margin-top: 4px; letter-spacing: 1px; }
+            .sidebar-footer { margin-top: auto; padding: 16px 10px; text-align: center; border-top: 1px solid var(--panel-border); background: rgba(0,0,0,0.1); }
             
-            /* FIXED: Force green system status */
             .status-dot { width: 8px; height: 8px; background: #10b981; border-radius: 50%; display: inline-block; box-shadow: 0 0 10px #10b981; animation: pulse 2s infinite; }
             .status-text { color: #94a3b8; font-size: 9px; font-weight: 700; margin-top: 6px; letter-spacing: 1px; text-transform: uppercase; }
             @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
 
-            /* Layout Fixes */
             .pos-top { flex-direction: column; }
-            .pos-top .gd-tabs { flex-direction: row; border-bottom: 1px solid var(--panel-border); border-right: none; width: 100%; height: auto; }
+            .pos-top .gd-tabs { flex-direction: row; border-bottom: 1px solid var(--panel-border); border-right: none; width: 100%; height: auto; overflow-x: auto; -webkit-overflow-scrolling: touch; }
             .pos-top .sidebar-header, .pos-top .sidebar-footer { display: none; }
             .pos-top .gd-tab.active { border-bottom: 2px solid var(--theme-color); background: rgba(255,255,255,0.03); border-right: none; }
             
-            .gd-tab { display: flex; align-items: center; justify-content: flex-start; padding: 14px 20px; font-size: 12px; font-weight: 600; cursor: pointer; color: #94a3b8; transition: all 0.2s ease; border-right: 2px solid transparent; }
+            .gd-tab { display: flex; align-items: center; justify-content: flex-start; padding: 12px 16px; font-size: 11px; font-weight: 600; cursor: pointer; color: #94a3b8; transition: all 0.2s ease; border-right: 2px solid transparent; white-space: nowrap; }
             .gd-tab:hover { color: #f8fafc; background: rgba(255,255,255,0.03); }
             .gd-tab.active { color: #fff; background: rgba(255,255,255,0.05); border-right: 2px solid var(--theme-color); text-shadow: 0 0 8px rgba(255,255,255,0.2); }
             
-            .gd-body { flex: 1; padding: 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 24px; scroll-behavior: smooth; }
-            .gd-body::-webkit-scrollbar { width: 4px; }
+            /* SCROLL FIX IMPLEMENTED HERE */
+            .gd-body { 
+                flex: 1; padding: 16px; overflow-y: auto; overflow-x: hidden; 
+                display: flex; flex-direction: column; gap: 20px; 
+                scroll-behavior: smooth; -webkit-overflow-scrolling: touch; 
+                touch-action: pan-y; overscroll-behavior: contain; 
+            }
+            .gd-body::-webkit-scrollbar { width: 4px; height: 4px; }
             .gd-body::-webkit-scrollbar-track { background: transparent; }
             .gd-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
             .gd-body::-webkit-scrollbar-thumb:hover { background: var(--theme-color); }
             
-            .tab-content { display: none; flex-direction: column; gap: 20px; opacity: 0; transform: translateY(10px); transition: opacity 0.3s ease, transform 0.3s ease; }
+            .tab-content { display: none; flex-direction: column; gap: 16px; opacity: 0; transform: translateY(10px); transition: opacity 0.3s ease, transform 0.3s ease; }
             .tab-content.active { display: flex; opacity: 1; transform: translateY(0px); }
             
-            .section-title { font-size: 11px; text-transform: uppercase; color: var(--theme-color); font-weight: 800; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px; letter-spacing: 1.5px; opacity: 0.9; }
+            .section-title { font-size: 10px; text-transform: uppercase; color: var(--theme-color); font-weight: 800; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 6px; letter-spacing: 1px; opacity: 0.9; }
             
-            .mod-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-            .mod-label { font-size: 13px; font-weight: 500; display: flex; flex-direction: column; color: #e2e8f0; line-height: 1.4; }
-            .mod-subtext { font-size: 11px; color: #64748b; font-weight: 400; margin-top: 2px; }
+            .mod-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+            .mod-label { font-size: 12px; font-weight: 500; display: flex; flex-direction: column; color: #e2e8f0; line-height: 1.4; flex: 1; min-width: 120px; }
+            .mod-subtext { font-size: 10px; color: #64748b; font-weight: 400; margin-top: 2px; }
             
-            .warning-box { background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); color: #fca5a5; padding: 12px 16px; border-radius: 8px; font-size: 12px; font-weight: 500; display: flex; align-items: flex-start; gap: 12px; line-height: 1.5; }
+            .warning-box { background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); color: #fca5a5; padding: 10px 12px; border-radius: 8px; font-size: 11px; font-weight: 500; display: flex; align-items: flex-start; gap: 10px; line-height: 1.4; }
             
-            /* Sleeker Apple-style Toggles */
-            .switch { position: relative; display: inline-block; width: 44px; height: 24px; flex-shrink: 0; }
+            .switch { position: relative; display: inline-block; width: 40px; height: 22px; flex-shrink: 0; }
             .switch input { opacity: 0; width: 0; height: 0; }
-            .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(255,255,255,0.1); transition: 0.3s; border-radius: 24px; }
-            .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: #fff; transition: 0.3s; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.3); }
+            .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(255,255,255,0.1); transition: 0.3s; border-radius: 22px; }
+            .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: #fff; transition: 0.3s; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.3); }
             input:checked + .slider { background-color: var(--theme-color); }
-            input:checked + .slider:before { transform: translateX(20px); }
+            input:checked + .slider:before { transform: translateX(18px); }
             
-            /* REDESIGNED: Editable Clean Numbers */
-            .range-container { display: flex; flex-direction: column; gap: 12px; }
-            .range-header { display: flex; justify-content: space-between; font-size: 13px; font-weight: 500; color: #e2e8f0; align-items: center; }
-            .range-val-container { display: flex; align-items: center; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 2px 8px; transition: all 0.2s; }
+            .range-container { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+            .range-header { display: flex; justify-content: space-between; font-size: 12px; font-weight: 500; color: #e2e8f0; align-items: center; }
+            .range-val-container { display: flex; align-items: center; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 2px 6px; transition: all 0.2s; }
             .range-val-container:focus-within { border-color: var(--theme-color); box-shadow: 0 0 0 2px rgba(0, 255, 204, 0.15); background: rgba(0,0,0,0.4); }
-            .range-val-input { background: transparent; border: none; color: #fff; font-weight: 600; font-family: monospace; width: 45px; text-align: right; outline: none; font-size: 13px; }
-            .range-unit { color: #94a3b8; font-size: 12px; margin-left: 4px; font-weight: 500; }
+            .range-val-input { background: transparent; border: none; color: #fff; font-weight: 600; font-family: monospace; width: 40px; text-align: right; outline: none; font-size: 12px; }
+            .range-unit { color: #94a3b8; font-size: 11px; margin-left: 4px; font-weight: 500; }
             
-            .gd-range { -webkit-appearance: none; width: 100%; height: 4px; background: rgba(255, 255, 255, 0.1); border-radius: 4px; outline: none; }
-            .gd-range::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 3px solid var(--theme-color); cursor: pointer; transition: transform 0.1s, box-shadow 0.2s; }
+            .gd-range { -webkit-appearance: none; width: 100%; height: 4px; background: rgba(255, 255, 255, 0.1); border-radius: 4px; outline: none; touch-action: pan-x; }
+            .gd-range::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: #fff; border: 3px solid var(--theme-color); cursor: pointer; transition: transform 0.1s, box-shadow 0.2s; }
             .gd-range::-webkit-slider-thumb:hover { transform: scale(1.1); box-shadow: var(--text-glow); }
 
-            .gd-select { background: rgba(0,0,0,0.3); color: #fff; border: 1px solid rgba(255,255,255,0.1); padding: 8px 12px; border-radius: 8px; outline: none; cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 500; transition: all 0.2s; }
+            .gd-select { background: rgba(0,0,0,0.3); color: #fff; border: 1px solid rgba(255,255,255,0.1); padding: 6px 10px; border-radius: 6px; outline: none; cursor: pointer; font-family: inherit; font-size: 11px; font-weight: 500; transition: all 0.2s; max-width: 100%; }
             .gd-select:focus { border-color: var(--theme-color); box-shadow: 0 0 0 2px rgba(0, 255, 204, 0.15); }
             .gd-select option { background: #1a1a24; }
 
-            .gd-btn { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #f8fafc; padding: 10px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600; transition: all 0.2s ease; text-align: center; }
+            .gd-btn { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #f8fafc; padding: 8px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600; transition: all 0.2s ease; text-align: center; }
             .gd-btn:hover { background: rgba(255,255,255,0.1); border-color: var(--theme-color); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
             .gd-btn:active { transform: translateY(0); }
-            .btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
-            .btn-group .gd-btn { flex: 1; min-width: 60px; padding: 8px; font-size: 12px; }
+            .btn-group { display: flex; gap: 6px; flex-wrap: wrap; }
+            .btn-group .gd-btn { flex: 1; min-width: 50px; padding: 6px; font-size: 11px; }
 
-            .gd-footer { background: rgba(0, 0, 0, 0.2); padding: 14px; font-size: 11px; color: #64748b; text-align: center; border-bottom-left-radius: 14px; border-bottom-right-radius: 14px; flex-shrink: 0; cursor: move; border-top: 1px solid var(--panel-border); font-weight: 500; letter-spacing: 0.5px; }
+            .gd-footer { background: rgba(0, 0, 0, 0.2); padding: 10px; font-size: 10px; color: #64748b; text-align: center; border-bottom-left-radius: 14px; border-bottom-right-radius: 14px; flex-shrink: 0; cursor: move; border-top: 1px solid var(--panel-border); font-weight: 500; letter-spacing: 0.5px; touch-action: none; }
             
             /* Overlays */
             #gd-aim-line { position: absolute; top: 50%; left: 0; width: 100%; height: 1px; background: var(--theme-color); box-shadow: var(--text-glow); pointer-events: none; z-index: 9999; display: none; }
@@ -269,6 +339,37 @@
             .ch-cross::after { top: 0; left: 9px; width: 2px; height: 20px; }
             .ch-reticle { width: 16px; height: 16px; border: 2px solid var(--crosshair-color, #00ffcc); border-radius: 50%; box-shadow: 0 0 5px var(--crosshair-color, #00ffcc); position: relative; }
             .ch-reticle::before { content: ''; position: absolute; top: 50%; left: 50%; width: 4px; height: 4px; background: var(--crosshair-color, #00ffcc); border-radius: 50%; transform: translate(-50%, -50%); }
+
+            /* Mobile Responsiveness Improvements */
+            @media (max-width: 768px) {
+                #gd-standalone-menu {
+                    width: 340px !important;
+                    height: 500px !important;
+                }
+                .gd-content-wrapper {
+                    flex-direction: column !important;
+                }
+                .gd-tabs {
+                    width: 100% !important;
+                    height: auto !important;
+                    flex-direction: row !important;
+                    overflow-x: auto !important;
+                    border-right: none !important;
+                    border-bottom: 1px solid var(--panel-border) !important;
+                }
+                .gd-tab {
+                    padding: 10px 14px;
+                    border-right: none !important;
+                    border-bottom: 2px solid transparent;
+                }
+                .gd-tab.active {
+                    border-bottom: 2px solid var(--theme-color) !important;
+                    border-right: none !important;
+                }
+                .sidebar-header, .sidebar-footer {
+                    display: none !important;
+                }
+            }
         `;
         document.head.appendChild(style);
 
@@ -433,6 +534,9 @@
                             <span class="mod-label">Macro Click Bind<span class="mod-subtext">Hold key down to trigger</span></span>
                             <input type="text" class="gd-select" style="width: 50px; text-align:center;" id="inp-macroKey" value="${config.macroKey.toUpperCase()}" maxlength="1">
                         </div>
+                        
+                        <div class="section-title">Mobile Adaptability</div>
+                        ${createToggle('Enable On-Screen Device Toggles', 'showMobileControls', 'Generates floating toggle buttons for Focus & Macro')}
 
                         <div class="section-title">Profile Database</div>
                         <div class="gd-btn" id="btn-save">Save Profile Settings</div>
@@ -441,9 +545,24 @@
                     </div>
                 </div>
             </div>
-            <div class="gd-footer" id="gd-footer-handle">Press your designated UI key to hide menu</div>
+            <div class="gd-footer" id="gd-footer-handle">Press your designated UI key or FAB to hide menu</div>
         `;
         document.body.appendChild(menu);
+
+        // Append mobile floating toggle button (FAB)
+        const fab = document.createElement('div');
+        fab.id = 'gd-mobile-toggle';
+        fab.innerHTML = '⚙️';
+        document.body.appendChild(fab);
+
+        // Append Mobile Action Controls
+        const mobileControls = document.createElement('div');
+        mobileControls.id = 'gd-mobile-controls';
+        mobileControls.innerHTML = `
+            <div class="gd-mc-btn" id="gd-mc-focus">Focus</div>
+            <div class="gd-mc-btn" id="gd-mc-macro">Macro</div>
+        `;
+        document.body.appendChild(mobileControls);
         
         requestAnimationFrame(() => {
             setTimeout(() => {
@@ -524,6 +643,12 @@
         
         if (!canvasTarget) return;
 
+        // Toggle Mobile Controls overlay purely through config
+        const mControls = document.getElementById('gd-mobile-controls');
+        if (mControls) {
+            mControls.style.display = config.showMobileControls ? 'flex' : 'none';
+        }
+
         canvasTarget.style.opacity = config.ghostMode / 100;
         canvasTarget.style.transition = 'none';
 
@@ -584,7 +709,7 @@
         if (isTimeSkipping) return; 
         if (config.loopWeek) {
             speedMultiplier = 604800; 
-        } else if (shiftHeld) {
+        } else if (shiftHeld || mobileFocusActive) { // Combined Keyboard & Mobile checks
             speedMultiplier = config.focusSpeed;
         } else {
             speedMultiplier = config.baseSpeed;
@@ -592,7 +717,6 @@
     }
 
     function setupInputListeners() {
-        // FIXED: Stop spacebar from toggling inputs unexpectedly while gaming
         document.addEventListener('keydown', (e) => {
             if (e.code === 'Space' && document.activeElement) {
                 const tag = document.activeElement.tagName;
@@ -643,7 +767,7 @@
             tg.addEventListener('change', (e) => {
                 const key = e.target.dataset.key;
                 config[key] = e.target.checked;
-                e.target.blur(); // Drop focus
+                e.target.blur(); 
                 
                 if (key === 'loopWeek') syncSpeedMultiplier();
                 applyAllVisuals();
@@ -672,13 +796,32 @@
             });
         });
 
+        // Mobile On-Screen Toggles Listeners
+        const btnFocus = document.getElementById('gd-mc-focus');
+        if (btnFocus) {
+            btnFocus.addEventListener('click', () => {
+                mobileFocusActive = !mobileFocusActive;
+                btnFocus.classList.toggle('active', mobileFocusActive);
+                syncSpeedMultiplier();
+            });
+        }
+
+        const btnMacro = document.getElementById('gd-mc-macro');
+        if (btnMacro) {
+            btnMacro.addEventListener('click', () => {
+                mobileMacroActive = !mobileMacroActive;
+                btnMacro.classList.toggle('active', mobileMacroActive);
+                if (mobileMacroActive && !autoClickTimer) triggerAutoClick();
+            });
+        }
+
         document.getElementById('btn-timeskip').addEventListener('click', (e) => {
             if (isTimeSkipping || config.loopWeek) return; 
             isTimeSkipping = true;
             
             const btn = e.target;
             const originalText = btn.innerText;
-            btn.innerText = "Processing Telemetry Matrix Skips...";
+            btn.innerText = "Processing Skips...";
             btn.style.borderColor = "#ef4444";
             btn.style.color = "#ef4444";
 
@@ -729,6 +872,11 @@
             const el = document.getElementById('stat-clicks');
             if (el) el.innerText = sessionClicks;
         });
+        document.addEventListener('touchstart', () => {
+            sessionClicks++;
+            const el = document.getElementById('stat-clicks');
+            if (el) el.innerText = sessionClicks;
+        }, {passive: true});
     }
 
     // =========================================================
@@ -745,7 +893,8 @@
     let spamKeyHeld = false;
 
     function triggerAutoClick() {
-        if (!config.autoClickerActive || !spamKeyHeld) {
+        // Evaluate logic checking either keyboard macro key OR mobile toggle button
+        if (!config.autoClickerActive || (!spamKeyHeld && !mobileMacroActive)) {
             autoClickTimer = null;
             return;
         }
@@ -832,6 +981,12 @@
                 const dynamicThemeColor = `hsl(${chromaHue}, 100%, 50%)`;
                 document.documentElement.style.setProperty('--theme-color', dynamicThemeColor);
                 document.documentElement.style.setProperty('--text-glow', `0 0 12px ${dynamicThemeColor}`);
+                
+                const fab = document.getElementById('gd-mobile-toggle');
+                if (fab) {
+                    fab.style.color = dynamicThemeColor;
+                    fab.style.borderColor = dynamicThemeColor;
+                }
             }
 
             if (canvasTarget) {
@@ -879,71 +1034,116 @@
                 }
             }
 
-            // Using standard rAF here ensures the loop itself still paces with the newly unlocked environment
             requestAnimationFrame(updateLoop);
         }
         requestAnimationFrame(updateLoop);
     }
 
     // =========================================================
-    // 7. DRAGGING
+    // 7. DRAGGING ENGINE (REBUILT FOR POINTER EVENTS)
     // =========================================================
     function setupDragging() {
+        // --- 1. Main Menu Dragging ---
+        const menu = document.getElementById('gd-standalone-menu');
         const headerHandle = document.getElementById('gd-handle');
         const footerHandle = document.getElementById('gd-footer-handle');
-        const menu = document.getElementById('gd-standalone-menu');
         
-        let dragging = false;
-        let startX = 0, startY = 0;
-        let menuLeft = 60, menuTop = window.innerHeight / 2; 
-        let mouseX = 0, mouseY = 0;
+        let isMenuDragging = false;
+        let menuStartX = 0, menuStartY = 0;
+        let menuInitialLeft = 0, menuInitialTop = 0;
 
-        function onMouseDown(e) {
+        function onMenuPointerDown(e) {
             if (e.target.closest('input, select, .gd-btn, .gd-tab')) return;
+            isMenuDragging = true;
             
-            dragging = true;
             const rect = menu.getBoundingClientRect();
-            menuLeft = rect.left;
-            menuTop = rect.top;
+            menuInitialLeft = rect.left;
+            menuInitialTop = rect.top;
             
-            startX = e.clientX;
-            startY = e.clientY;
-            mouseX = e.clientX;
-            mouseY = e.clientY;
-            
-            menu.style.transform = 'translateY(0) scale(1) translateX(0)';
-            
-            document.addEventListener('mousemove', onMouseMove);
-            document.addEventListener('mouseup', onMouseUp);
-            
-            requestAnimationFrame(updateMenuPosition);
+            menuStartX = e.clientX;
+            menuStartY = e.clientY;
+
+            // Lock it to its current pixel layout so dragging is 1:1, preventing CSS Transform conflicts
+            menu.style.left = menuInitialLeft + 'px';
+            menu.style.top = menuInitialTop + 'px';
+
+            document.addEventListener('pointermove', onMenuPointerMove, {passive: false});
+            document.addEventListener('pointerup', onMenuPointerUp);
         }
 
-        function onMouseMove(e) {
-            mouseX = e.clientX;
-            mouseY = e.clientY;
+        function onMenuPointerMove(e) {
+            if (!isMenuDragging) return;
+            e.preventDefault(); 
+            
+            const dx = e.clientX - menuStartX;
+            const dy = e.clientY - menuStartY;
+            
+            menu.style.left = (menuInitialLeft + dx) + 'px';
+            menu.style.top = (menuInitialTop + dy) + 'px';
         }
 
-        function onMouseUp() {
-            dragging = false;
-            document.removeEventListener('mousemove', onMouseMove);
-            document.removeEventListener('mouseup', onMouseUp);
+        function onMenuPointerUp() {
+            isMenuDragging = false;
+            document.removeEventListener('pointermove', onMenuPointerMove);
+            document.removeEventListener('pointerup', onMenuPointerUp);
         }
 
-        function updateMenuPosition() {
-            if (!dragging) return;
-            
-            const deltaX = mouseX - startX;
-            const deltaY = mouseY - startY;
-            
-            menu.style.left = (menuLeft + deltaX) + 'px';
-            menu.style.top = (menuTop + deltaY) + 'px';
-            
-            requestAnimationFrame(updateMenuPosition);
+        headerHandle.addEventListener('pointerdown', onMenuPointerDown);
+        footerHandle.addEventListener('pointerdown', onMenuPointerDown);
+
+        // --- 2. Mobile FAB (Toggle Button) Dragging vs Clicking ---
+        const fab = document.getElementById('gd-mobile-toggle');
+        let isFabDragging = false;
+        let hasFabMoved = false;
+        let fabStartX = 0, fabStartY = 0;
+        let fabInitialLeft = 0, fabInitialTop = 0;
+
+        function onFabPointerDown(e) {
+            isFabDragging = true;
+            hasFabMoved = false;
+
+            fabStartX = e.clientX;
+            fabStartY = e.clientY;
+
+            const rect = fab.getBoundingClientRect();
+            fabInitialLeft = rect.left;
+            fabInitialTop = rect.top;
+
+            document.addEventListener('pointermove', onFabPointerMove, {passive: false});
+            document.addEventListener('pointerup', onFabPointerUp);
         }
 
-        headerHandle.addEventListener('mousedown', onMouseDown);
-        footerHandle.addEventListener('mousedown', onMouseDown);
+        function onFabPointerMove(e) {
+            if (!isFabDragging) return;
+
+            const dx = e.clientX - fabStartX;
+            const dy = e.clientY - fabStartY;
+
+            // Strict threshold of 8 pixels to distinguish a touch/tap from a real drag
+            if (Math.abs(dx) > 8 || Math.abs(dy) > 8) {
+                hasFabMoved = true;
+                e.preventDefault(); // Stop screen from scrolling while moving the button
+                
+                // Clear any anchored coordinates to follow the pointer freely
+                fab.style.bottom = 'auto';
+                fab.style.right = 'auto';
+                fab.style.left = (fabInitialLeft + dx) + 'px';
+                fab.style.top = (fabInitialTop + dy) + 'px';
+            }
+        }
+
+        function onFabPointerUp() {
+            isFabDragging = false;
+            document.removeEventListener('pointermove', onFabPointerMove);
+            document.removeEventListener('pointerup', onFabPointerUp);
+
+            // If the user tapped instead of dragging, toggle the menu
+            if (!hasFabMoved && menu) {
+                menu.classList.toggle('menu-hidden');
+            }
+        }
+
+        fab.addEventListener('pointerdown', onFabPointerDown);
     }
 
     function init() {
