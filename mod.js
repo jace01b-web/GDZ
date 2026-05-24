@@ -51,7 +51,7 @@
         menuTheme: '#00ffcc',
         chromaTheme: true, 
         tabPosition: 'left', 
-        toggleKey: 'k',
+        toggleKey: 'm',
         macroKey: 'c',
         showMobileControls: false, // Defaulted false for PC, overridden automatically for Mobile below
         menuScaleX: 1.0,           // Width Multiplier (Min 0.9, Max 2.5)
