@@ -51,7 +51,8 @@
         tabPosition: 'left', 
         toggleKey: 'm',
         macroKey: 'c',
-        showMobileControls: /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+        showMobileControls: /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent),
+        dismissedAntiLagWarning: false // Added warning state
     };
 
     function loadConfig() {
@@ -109,18 +110,31 @@
     const originalRAF = window.requestAnimationFrame.bind(window);
     const originalCAF = window.cancelAnimationFrame.bind(window);
     
+    // Performance Fix: MessageChannel approach removes the heavy setTimeout lag
+    let rafs = new Map();
+    let rafId = 0;
+    const fpsChannel = new MessageChannel();
+    
+    fpsChannel.port1.onmessage = () => {
+        const callbacks = Array.from(rafs.values());
+        rafs.clear();
+        const now = performance.now();
+        callbacks.forEach(cb => cb(now));
+    };
+    
     window.requestAnimationFrame = function(callback) {
         if (config.fpsUnlocker) {
-            return window.setTimeout(() => {
-                callback(performance.now());
-            }, 0);
+            rafId++;
+            rafs.set(rafId, callback);
+            fpsChannel.port2.postMessage(null);
+            return rafId;
         }
         return originalRAF(callback);
     };
 
     window.cancelAnimationFrame = function(id) {
-        if (config.fpsUnlocker) {
-            window.clearTimeout(id);
+        if (config.fpsUnlocker && rafs.has(id)) {
+            rafs.delete(id);
         } else {
             originalCAF(id);
         }
@@ -250,7 +264,8 @@
             .gd-title { font-weight: 800; font-size: 14px; color: #fff; letter-spacing: 2px; text-shadow: var(--text-glow); transition: text-shadow 0.3s; }
             .gd-fps { font-family: monospace; color: #fff; font-size: 11px; font-weight: bold; background: rgba(0, 0, 0, 0.5); padding: 4px 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); }
             
-            .gd-content-wrapper { display: flex; flex: 1; overflow: hidden; position: relative; }
+            /* SCROLL FIXES IMPLEMENTED HERE */
+            .gd-content-wrapper { display: flex; flex: 1; overflow: hidden; position: relative; min-height: 0; }
             .gd-tabs { display: flex; flex-direction: column; background: rgba(0, 0, 0, 0.15); flex-shrink: 0; transition: all 0.4s ease; border-right: 1px solid var(--panel-border); width: 120px; }
             
             .sidebar-header { padding: 16px 10px 12px; text-align: center; border-bottom: 1px solid var(--panel-border); margin-bottom: 8px; }
@@ -271,12 +286,12 @@
             .gd-tab:hover { color: #f8fafc; background: rgba(255,255,255,0.03); }
             .gd-tab.active { color: #fff; background: rgba(255,255,255,0.05); border-right: 2px solid var(--theme-color); text-shadow: 0 0 8px rgba(255,255,255,0.2); }
             
-            /* SCROLL FIX IMPLEMENTED HERE */
+            /* Enhanced scrolling variables */
             .gd-body { 
                 flex: 1; padding: 16px; overflow-y: auto; overflow-x: hidden; 
                 display: flex; flex-direction: column; gap: 20px; 
                 scroll-behavior: smooth; -webkit-overflow-scrolling: touch; 
-                touch-action: pan-y; overscroll-behavior: contain; 
+                touch-action: auto; overscroll-behavior: auto; min-height: 0;
             }
             .gd-body::-webkit-scrollbar { width: 4px; height: 4px; }
             .gd-body::-webkit-scrollbar-track { background: transparent; }
@@ -340,7 +355,13 @@
             .ch-reticle { width: 16px; height: 16px; border: 2px solid var(--crosshair-color, #00ffcc); border-radius: 50%; box-shadow: 0 0 5px var(--crosshair-color, #00ffcc); position: relative; }
             .ch-reticle::before { content: ''; position: absolute; top: 50%; left: 50%; width: 4px; height: 4px; background: var(--crosshair-color, #00ffcc); border-radius: 50%; transform: translate(-50%, -50%); }
 
-            /* Mobile Responsiveness Improvements */
+            /* Mobile Responsiveness Improvements & Hiding Toggle on Desktop */
+            @media (min-width: 769px) {
+                #gd-mobile-toggle, #gd-mobile-controls {
+                    display: none !important;
+                }
+            }
+
             @media (max-width: 768px) {
                 #gd-standalone-menu {
                     width: 340px !important;
@@ -402,6 +423,14 @@
                 </div>
 
                 <div class="gd-body">
+                    <div id="gd-anti-lag-warning" class="warning-box" style="margin-bottom: 15px; display: none; align-items: center; justify-content: space-between; flex-shrink: 0;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <span style="font-size: 16px;">⚠</span> 
+                            <span><b>Warning:</b> Anti-lag mode disables a lot of mods! Canvas Transforms and Filters are forcefully disabled.</span>
+                        </div>
+                        <button class="gd-btn" id="btn-dismiss-warning" style="background: #ef4444; color: #fff; opacity: 0.5; cursor: not-allowed; pointer-events: none; text-align: center; white-space: nowrap; margin-left:10px;" disabled>Dismiss (10)</button>
+                    </div>
+
                     <div class="tab-content active" id="tab-main">
                         <div class="section-title">Engine Speeds</div>
                         ${createSlider('Base Engine Clock Speed', 'baseSpeed', 0.05, 5.0, 0.05, 'x')}
@@ -422,11 +451,6 @@
                     </div>
 
                     <div class="tab-content" id="tab-visuals">
-                        <div class="warning-box">
-                            <span style="font-size: 16px;">⚠</span> 
-                            <span>Canvas Transforms and Filters are forcefully disabled while <b>Anti-Lag Optimization</b> is active in the Engine tab.</span>
-                        </div>
-                        
                         <div class="section-title">Color Modifiers</div>
                         ${createToggle('Chroma RGB UI Mode', 'chromaTheme', 'Continuously shifts client colors')}
                         ${createToggle('Rainbow Game Canvas Mode', 'rainbowMode', 'Cycles canvas color matrix automatically')}
@@ -548,6 +572,36 @@
             <div class="gd-footer" id="gd-footer-handle">Press your designated UI key or FAB to hide menu</div>
         `;
         document.body.appendChild(menu);
+
+        // Warning Dismissal Logic
+        const warnBox = document.getElementById('gd-anti-lag-warning');
+        if (warnBox && !config.dismissedAntiLagWarning) {
+            warnBox.style.display = 'flex';
+            let timeLeft = 10;
+            const dismissBtn = document.getElementById('btn-dismiss-warning');
+            
+            const timer = setInterval(() => {
+                timeLeft--;
+                if (timeLeft <= 0) {
+                    clearInterval(timer);
+                    if (dismissBtn) {
+                        dismissBtn.innerText = "Dismiss";
+                        dismissBtn.style.opacity = "1";
+                        dismissBtn.style.cursor = "pointer";
+                        dismissBtn.style.pointerEvents = "auto";
+                        dismissBtn.disabled = false;
+                    }
+                } else {
+                    if (dismissBtn) dismissBtn.innerText = `Dismiss (${timeLeft})`;
+                }
+            }, 1000);
+
+            dismissBtn.addEventListener('click', () => {
+                warnBox.style.display = 'none';
+                config.dismissedAntiLagWarning = true;
+                // Only gets saved globally if user proceeds to hit Save Configuration Settings manually
+            });
+        }
 
         // Append mobile floating toggle button (FAB)
         const fab = document.createElement('div');
