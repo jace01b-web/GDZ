@@ -4,6 +4,8 @@
     // =========================================================
     const STORAGE_KEY = 'gd_wave_premium_config_v5';
     
+    const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    
     // Default values
     let config = {
         baseSpeed: 1.0,
@@ -51,8 +53,10 @@
         tabPosition: 'left', 
         toggleKey: 'm',
         macroKey: 'c',
-        showMobileControls: /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent),
-        dismissedAntiLagWarning: false // Added warning state
+        showMobileControls: false, // Defaulted false for PC, overridden automatically for Mobile below
+        menuScaleX: 1.0,           // Width Multiplier (Min 0.9, Max 2.5)
+        menuScaleY: 1.0,           // Height Multiplier (Min 0.9, Max 2.5)
+        dismissedAntiLagWarning: false
     };
 
     function loadConfig() {
@@ -110,7 +114,6 @@
     const originalRAF = window.requestAnimationFrame.bind(window);
     const originalCAF = window.cancelAnimationFrame.bind(window);
     
-    // Performance Fix: MessageChannel approach removes the heavy setTimeout lag
     let rafs = new Map();
     let rafId = 0;
     const fpsChannel = new MessageChannel();
@@ -162,8 +165,8 @@
                 left: 10vw; 
                 width: 520px; 
                 height: 600px;
-                max-width: 90vw;
-                max-height: 85vh;
+                max-width: 95vw;
+                max-height: 95vh;
                 background: var(--bg-color); 
                 backdrop-filter: blur(24px) saturate(140%); -webkit-backdrop-filter: blur(24px) saturate(140%);
                 border: 1px solid var(--panel-border); 
@@ -179,7 +182,7 @@
                 opacity: 0;
                 transform-origin: center;
                 transform: scale(0.95);
-                transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
+                transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease, width 0.3s, height 0.3s;
             }
             
             #gd-standalone-menu.menu-visible {
@@ -194,7 +197,6 @@
                 pointer-events: none !important;
             }
 
-            /* Mobile Floating Toggle Button */
             #gd-mobile-toggle {
                 position: fixed;
                 bottom: 20px;
@@ -222,7 +224,6 @@
                 background: rgba(255,255,255,0.1);
             }
 
-            /* Mobile On-Screen Action Toggles */
             #gd-mobile-controls {
                 position: fixed;
                 bottom: 80px; 
@@ -264,7 +265,6 @@
             .gd-title { font-weight: 800; font-size: 14px; color: #fff; letter-spacing: 2px; text-shadow: var(--text-glow); transition: text-shadow 0.3s; }
             .gd-fps { font-family: monospace; color: #fff; font-size: 11px; font-weight: bold; background: rgba(0, 0, 0, 0.5); padding: 4px 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); }
             
-            /* SCROLL FIXES IMPLEMENTED HERE */
             .gd-content-wrapper { display: flex; flex: 1; overflow: hidden; position: relative; min-height: 0; }
             .gd-tabs { display: flex; flex-direction: column; background: rgba(0, 0, 0, 0.15); flex-shrink: 0; transition: all 0.4s ease; border-right: 1px solid var(--panel-border); width: 120px; }
             
@@ -286,7 +286,6 @@
             .gd-tab:hover { color: #f8fafc; background: rgba(255,255,255,0.03); }
             .gd-tab.active { color: #fff; background: rgba(255,255,255,0.05); border-right: 2px solid var(--theme-color); text-shadow: 0 0 8px rgba(255,255,255,0.2); }
             
-            /* Enhanced scrolling variables */
             .gd-body { 
                 flex: 1; padding: 16px; overflow-y: auto; overflow-x: hidden; 
                 display: flex; flex-direction: column; gap: 20px; 
@@ -355,13 +354,6 @@
             .ch-reticle { width: 16px; height: 16px; border: 2px solid var(--crosshair-color, #00ffcc); border-radius: 50%; box-shadow: 0 0 5px var(--crosshair-color, #00ffcc); position: relative; }
             .ch-reticle::before { content: ''; position: absolute; top: 50%; left: 50%; width: 4px; height: 4px; background: var(--crosshair-color, #00ffcc); border-radius: 50%; transform: translate(-50%, -50%); }
 
-            /* Mobile Responsiveness Improvements & Hiding Toggle on Desktop */
-            @media (min-width: 769px) {
-                #gd-mobile-toggle, #gd-mobile-controls {
-                    display: none !important;
-                }
-            }
-
             @media (max-width: 768px) {
                 #gd-standalone-menu {
                     width: 340px !important;
@@ -398,7 +390,7 @@
         menu.id = 'gd-standalone-menu';
         menu.innerHTML = `
             <div class="gd-header" id="gd-handle">
-                <span class="gd-title">WAVE CLIENT</span>
+                <span class="gd-title">WAVE CLIENT <span style="font-size:9px; color:var(--theme-color); opacity:0.6; font-weight:600; margin-left: 8px;">InitialsAndVoices</span></span>
                 <span class="gd-fps" id="fps-counter">0 FPS</span>
             </div>
             
@@ -538,8 +530,10 @@
                             { value: 'top', text: 'Top Horizontal' }
                         ])}
 
-                        <div class="section-title">Interface Density</div>
+                        <div class="section-title">Interface Density & Dimensions</div>
                         ${createSlider('Menu Alpha Transparency', 'menuOpacity', 0.2, 1.0, 0.02, '')}
+                        ${createSlider('Menu Width (X) Rescale', 'menuScaleX', 0.9, 2.5, 0.1, 'x')}
+                        ${createSlider('Menu Height (Y) Rescale', 'menuScaleY', 0.9, 2.5, 0.1, 'x')}
                         
                         <div class="section-title">System Visuals</div>
                         ${createSelect('Real Cursor Style', 'realCursor', [
@@ -559,8 +553,8 @@
                             <input type="text" class="gd-select" style="width: 50px; text-align:center;" id="inp-macroKey" value="${config.macroKey.toUpperCase()}" maxlength="1">
                         </div>
                         
-                        <div class="section-title">Mobile Adaptability</div>
-                        ${createToggle('Enable On-Screen Device Toggles', 'showMobileControls', 'Generates floating toggle buttons for Focus & Macro')}
+                        <div class="section-title">Platform Toggles</div>
+                        ${createToggle('Force On-Screen Device Toggles', 'showMobileControls', 'Generates floating toggle buttons for Focus & Macro')}
 
                         <div class="section-title">Profile Database</div>
                         <div class="gd-btn" id="btn-save">Save Profile Settings</div>
@@ -599,17 +593,14 @@
             dismissBtn.addEventListener('click', () => {
                 warnBox.style.display = 'none';
                 config.dismissedAntiLagWarning = true;
-                // Only gets saved globally if user proceeds to hit Save Configuration Settings manually
             });
         }
 
-        // Append mobile floating toggle button (FAB)
         const fab = document.createElement('div');
         fab.id = 'gd-mobile-toggle';
         fab.innerHTML = '⚙️';
         document.body.appendChild(fab);
 
-        // Append Mobile Action Controls
         const mobileControls = document.createElement('div');
         mobileControls.id = 'gd-mobile-controls';
         mobileControls.innerHTML = `
@@ -697,10 +688,23 @@
         
         if (!canvasTarget) return;
 
-        // Toggle Mobile Controls overlay purely through config
+        // Ensure controls display logic works universally (Mobile automatic, PC by toggle)
+        const shouldShowControls = isMobileDevice || config.showMobileControls;
         const mControls = document.getElementById('gd-mobile-controls');
+        const mToggle = document.getElementById('gd-mobile-toggle');
+
         if (mControls) {
-            mControls.style.display = config.showMobileControls ? 'flex' : 'none';
+            mControls.style.display = shouldShowControls ? 'flex' : 'none';
+        }
+        if (mToggle) {
+            mToggle.style.display = shouldShowControls ? 'flex' : 'none';
+        }
+
+        // Handle Rescaling
+        const menuEl = document.getElementById('gd-standalone-menu');
+        if (menuEl) {
+            menuEl.style.width = (520 * config.menuScaleX) + 'px';
+            menuEl.style.height = (600 * config.menuScaleY) + 'px';
         }
 
         canvasTarget.style.opacity = config.ghostMode / 100;
@@ -713,13 +717,11 @@
             if (canvasTarget.style.imageRendering !== 'pixelated') canvasTarget.style.imageRendering = 'pixelated';
             if (canvasTarget.style.willChange !== 'transform') canvasTarget.style.willChange = 'transform';
             
-            const menuEl = document.getElementById('gd-standalone-menu');
             if (menuEl && menuEl.style.backdropFilter !== 'none') menuEl.style.backdropFilter = 'none';
         } else {
             if (canvasTarget.style.imageRendering !== 'auto') canvasTarget.style.imageRendering = 'auto';
             if (canvasTarget.style.willChange !== 'auto') canvasTarget.style.willChange = 'auto';
             
-            const menuEl = document.getElementById('gd-standalone-menu');
             if (menuEl && menuEl.style.backdropFilter !== 'blur(24px) saturate(140%)') menuEl.style.backdropFilter = 'blur(24px) saturate(140%)';
         }
 
@@ -763,7 +765,7 @@
         if (isTimeSkipping) return; 
         if (config.loopWeek) {
             speedMultiplier = 604800; 
-        } else if (shiftHeld || mobileFocusActive) { // Combined Keyboard & Mobile checks
+        } else if (shiftHeld || mobileFocusActive) { 
             speedMultiplier = config.focusSpeed;
         } else {
             speedMultiplier = config.baseSpeed;
@@ -850,7 +852,6 @@
             });
         });
 
-        // Mobile On-Screen Toggles Listeners
         const btnFocus = document.getElementById('gd-mc-focus');
         if (btnFocus) {
             btnFocus.addEventListener('click', () => {
@@ -947,7 +948,6 @@
     let spamKeyHeld = false;
 
     function triggerAutoClick() {
-        // Evaluate logic checking either keyboard macro key OR mobile toggle button
         if (!config.autoClickerActive || (!spamKeyHeld && !mobileMacroActive)) {
             autoClickTimer = null;
             return;
@@ -1097,7 +1097,6 @@
     // 7. DRAGGING ENGINE (REBUILT FOR POINTER EVENTS)
     // =========================================================
     function setupDragging() {
-        // --- 1. Main Menu Dragging ---
         const menu = document.getElementById('gd-standalone-menu');
         const headerHandle = document.getElementById('gd-handle');
         const footerHandle = document.getElementById('gd-footer-handle');
@@ -1117,7 +1116,6 @@
             menuStartX = e.clientX;
             menuStartY = e.clientY;
 
-            // Lock it to its current pixel layout so dragging is 1:1, preventing CSS Transform conflicts
             menu.style.left = menuInitialLeft + 'px';
             menu.style.top = menuInitialTop + 'px';
 
@@ -1145,7 +1143,6 @@
         headerHandle.addEventListener('pointerdown', onMenuPointerDown);
         footerHandle.addEventListener('pointerdown', onMenuPointerDown);
 
-        // --- 2. Mobile FAB (Toggle Button) Dragging vs Clicking ---
         const fab = document.getElementById('gd-mobile-toggle');
         let isFabDragging = false;
         let hasFabMoved = false;
@@ -1173,12 +1170,10 @@
             const dx = e.clientX - fabStartX;
             const dy = e.clientY - fabStartY;
 
-            // Strict threshold of 8 pixels to distinguish a touch/tap from a real drag
             if (Math.abs(dx) > 8 || Math.abs(dy) > 8) {
                 hasFabMoved = true;
-                e.preventDefault(); // Stop screen from scrolling while moving the button
+                e.preventDefault(); 
                 
-                // Clear any anchored coordinates to follow the pointer freely
                 fab.style.bottom = 'auto';
                 fab.style.right = 'auto';
                 fab.style.left = (fabInitialLeft + dx) + 'px';
@@ -1191,7 +1186,6 @@
             document.removeEventListener('pointermove', onFabPointerMove);
             document.removeEventListener('pointerup', onFabPointerUp);
 
-            // If the user tapped instead of dragging, toggle the menu
             if (!hasFabMoved && menu) {
                 menu.classList.toggle('menu-hidden');
             }
