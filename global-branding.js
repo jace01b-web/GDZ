@@ -1,4 +1,4 @@
-document.title = "Level 67 Modded - InitialsAndVoices";
+document.title = "Level 67 Modded - AniItsuki";
 
 function changeFavicon(src) {
     // Look for an existing icon link
